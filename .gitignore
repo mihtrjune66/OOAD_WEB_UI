@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+.venv
+env/
+venv/
+*.docx
+*.pdf
+figma_export/

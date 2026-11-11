@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Chic® - Hệ Thống Quản Trị & Vận Hành Nội Bộ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
+
+    <!-- ==================== MÀN HÌNH ĐĂNG NHẬP ==================== -->
+    <div id="login-view" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-gray-100 to-gray-200">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-200 p-8 sm:p-10">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-black text-white mb-3 shadow-md">
+                    <i class="fa-solid fa-layer-group text-lg"></i>
+                </div>
+                <h2 class="text-2xl font-black tracking-widest text-black uppercase">Urban Chic<span class="text-xs text-gray-400 ml-1">®</span></h2>
+                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">Cổng Đăng Nhập Hệ Thống Nội Bộ</p>
+            </div>
+
+            <div id="login-error" class="hidden mb-4 p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-xl border border-red-200 flex items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation text-sm shrink-0"></i>
+                <span id="login-error-text"></span>
+            </div>
+
+            <form id="form-login" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Tên đăng nhập hoặc Email</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                            <i class="fa-solid fa-user text-xs"></i>
+                        </div>
+                        <input type="text" id="login-account" class="w-full pl-10 pr-3.5 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:bg-white focus:ring-2 focus:ring-black focus:border-black transition-all" placeholder="Nhập tên đăng nhập hoặc email..." required>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Mật khẩu</label>
+                        <button type="button" onclick="openModal('modal-forgot-password')" class="text-xs text-gray-500 hover:text-black font-semibold">Quên mật khẩu?</button>
+                    </div>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                            <i class="fa-solid fa-lock text-xs"></i>
+                        </div>
+                        <input type="password" id="login-password" class="w-full pl-10 pr-11 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:bg-white focus:ring-2 focus:ring-black focus:border-black transition-all" placeholder="••••••••" required>
+                        <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-700">
+                            <i id="toggle-pass-icon" class="fa-regular fa-eye text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between text-xs pt-1">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="remember-me" class="rounded border-gray-300 text-black focus:ring-black" checked>
+                        <span class="text-gray-600 font-medium">Ghi nhớ phiên đăng nhập</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-black hover:bg-gray-800 text-white rounded-xl text-sm font-bold tracking-wide transition-all shadow-md flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket text-xs"></i> Đăng nhập hệ thống
+                </button>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ==================== MAIN WORKSPACE (DYNAMIC RBAC) ==================== -->
+    <div id="main-portal" class="hidden flex h-screen overflow-hidden">
+        <!-- SIDEBAR -->
+        <aside class="w-64 bg-white border-r border-gray-200 flex flex-col justify-between shrink-0 no-print">
+            <div>
+                <div class="h-16 flex items-center px-6 border-b border-gray-100 gap-3">
+                    <div class="h-8 w-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs">
+                        UC
+                    </div>
+                    <div>
+                        <span class="text-base font-bold tracking-widest text-black uppercase">Urban Chic<span class="text-xs text-gray-400 ml-1">®</span></span>
+                        <span class="text-[10px] font-bold block text-indigo-600 tracking-wider -mt-1 uppercase" id="portal-role-sub">WORKSPACE</span>
+                    </div>
+                </div>
+
+                <nav class="px-3.5 py-5 space-y-1 overflow-y-auto" id="sidebar-menu"></nav>
+            </div>
+
+            <div class="p-4 border-t border-gray-100">
+                <div class="bg-gray-50 rounded-2xl p-3 flex items-center justify-between border border-gray-100">
+                    <div class="flex items-center gap-2.5 cursor-pointer" onclick="openProfileModal()" title="Hồ sơ & Đổi mật khẩu">
+                        <div class="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs" id="sidebar-avatar-text">
+                            UC
+                        </div>
+                        <div class="overflow-hidden">
+                            <p class="text-xs font-bold text-gray-900 truncate" id="sidebar-user-name">Người dùng</p>
+                            <p class="text-[11px] text-gray-500 font-medium truncate" id="sidebar-role-label">Chức vụ</p>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="text-gray-400 hover:text-red-600 p-1.5 transition-colors" title="Đăng xuất">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="flex-1 flex flex-col h-screen overflow-hidden">
+            <!-- TOP HEADER -->
+            <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 lg:px-8 shrink-0 no-print">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-lg bg-gray-100 text-gray-700" id="header-active-title">Bảng điều khiển</span>
+                </div>
+
+                <div class="flex items-center space-x-5">
+                    <div class="flex items-center gap-3 cursor-pointer" onclick="openProfileModal()" title="Hồ sơ cá nhân & Đổi mật khẩu">
+                        <div class="h-9 w-9 rounded-xl bg-black text-white flex items-center justify-center font-bold text-xs" id="topbar-avatar-text">
+                            UC
+                        </div>
+                        <div class="hidden md:block text-sm">
+                            <p class="font-bold text-gray-900 leading-none" id="user-name-display">Họ và Tên</p>
+                            <p class="text-gray-500 text-xs mt-1" id="user-role-display">Chức vụ</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-down text-xs text-gray-400"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- SCROLLABLE CONTENT BODY -->
+            <div class="flex-1 overflow-y-auto p-6 lg:p-8" id="workspace-container">
+
+                <!-- ===================================================================== -->
+                <!-- I. CÁC MÀN HÌNH QUẢN TRỊ HỆ THỐNG (ADMIN)                             -->
+                <!-- ===================================================================== -->
+
+                <!-- Admin UC 1: Xem báo cáo thống kê -->
+                <div id="tab-dashboard" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Xem Báo Cáo & Thống Kê Kinh Doanh</h1>
+                            <p class="text-sm text-gray-500 mt-1">Theo dõi số liệu doanh thu bán hàng, lợi nhuận gộp, tình trạng tồn kho và xuất tệp báo cáo.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 no-print">
+                            <button onclick="exportReportFile('EXCEL')" class="text-xs font-semibold text-black bg-white border border-gray-200 hover:bg-gray-50 px-3.5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-2xs">
+                                <i class="fa-solid fa-file-excel text-emerald-600"></i> Xuất Báo Cáo (Excel)
+                            </button>
+                            <button onclick="exportReportFile('PDF')" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-3.5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-2xs">
+                                <i class="fa-solid fa-file-pdf text-red-400"></i> Xuất PDF / In Báo Cáo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bộ lọc Báo cáo theo Đặc tả UC: Loại báo cáo (Doanh thu / Tồn kho) + Từ ngày - Đến ngày + Nút Tra cứu -->
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex flex-wrap items-end gap-4 no-print">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Loại báo cáo</label>
+                            <select id="report-type-select" class="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-gray-50 focus:bg-white">
+                                <option value="DOANH_THU">Báo cáo Doanh thu bán hàng</option>
+                                <option value="TON_KHO">Báo cáo Tình trạng Tồn kho SKU</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Từ ngày</label>
+                            <input type="date" id="report-start-date" value="2026-11-01" class="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Đến ngày</label>
+                            <input type="date" id="report-end-date" value="2026-11-30" class="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50">
+                        </div>
+                        <button onclick="loadDashboard()" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold hover:bg-gray-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-magnifying-glass"></i> Tra cứu số liệu
+                        </button>
+                    </div>
+
+                    <!-- 4 KPI Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-5 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Doanh thu hoàn tất</p>
+                                <p class="text-2xl font-bold text-gray-900" id="stat-revenue">0 ₫</p>
+                            </div>
+                            <div class="h-11 w-11 rounded-xl bg-black flex items-center justify-center text-white">
+                                <i class="fa-solid fa-wallet"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-5 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Lợi nhuận gộp thực tế</p>
+                                <p class="text-2xl font-bold text-emerald-600" id="stat-profit">0 ₫</p>
+                            </div>
+                            <div class="h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-5 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Đơn hàng hoàn tất</p>
+                                <p class="text-2xl font-bold text-gray-900" id="stat-orders">0</p>
+                            </div>
+                            <div class="h-11 w-11 rounded-xl bg-gray-100 flex items-center justify-center text-black">
+                                <i class="fa-solid fa-bag-shopping"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-5 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Khiếu nại Đổi trả</p>
+                                <p class="text-2xl font-bold text-amber-600" id="stat-returns">0 Yêu cầu</p>
+                            </div>
+                            <div class="h-11 w-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bảng dữ liệu chi tiết theo loại báo cáo -->
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                            <h2 class="text-base font-bold text-gray-900" id="dashboard-table-title">Bảng Chi Tiết Doanh Thu & Lợi Nhuận Theo Mã SKU</h2>
+                            <span class="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full" id="dashboard-sub-badge">Dữ liệu thời gian thực</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead id="thead-dashboard-report">
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-3.5">Mã SKU</th>
+                                        <th class="px-6 py-3.5">Tên Sản Phẩm</th>
+                                        <th class="px-6 py-3.5">Danh Mục</th>
+                                        <th class="px-6 py-3.5">Số Lượng Đã Bán</th>
+                                        <th class="px-6 py-3.5 text-right">Tổng Doanh Thu</th>
+                                        <th class="px-6 py-3.5 text-right">Lợi Nhuận Gộp</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-top-products" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin UC 2: Quản lý tài khoản nhân viên & Gửi email thông tin đăng nhập -->
+                <div id="tab-employees" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Tài khoản Nhân sự Nội bộ</h1>
+                            <p class="text-sm text-gray-500 mt-1">Tra cứu, cấp mới tài khoản, phân quyền, khóa/mở khóa và gửi Email thông tin đăng nhập tự động.</p>
+                        </div>
+                        <button onclick="openModal('modal-add-employee')" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 shrink-0">
+                            <i class="fa-solid fa-user-plus"></i> + Cấp TK & Gửi Email
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
+                        <input type="text" id="emp-search-q" oninput="loadEmployees()" placeholder="Tìm theo mã NV, họ tên hoặc email..." class="flex-1 min-w-[220px] px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                        <select id="emp-filter-role" onchange="loadEmployees()" class="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-gray-50">
+                            <option value="TAT_CA">Tất cả vai trò</option>
+                            <option value="ADMIN">Quản trị viên (Admin)</option>
+                            <option value="NV_VAN_HANH">Nhân viên Vận hành</option>
+                            <option value="NV_KHO">Nhân viên Kho (Thủ kho)</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã NV</th>
+                                        <th class="px-6 py-4">Họ và Tên</th>
+                                        <th class="px-6 py-4">Email Công Ty</th>
+                                        <th class="px-6 py-4">Số Điện Thoại</th>
+                                        <th class="px-6 py-4">Vai Trò Phân Quyền</th>
+                                        <th class="px-6 py-4">Trạng Thái</th>
+                                        <th class="px-6 py-4 text-right">Thao Tác Quản Trị</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-employees" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin UC 3: Quản lý thông tin khách hàng (CRM) -->
+                <div id="tab-customers" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Hồ sơ Khách hàng (CRM)</h1>
+                            <p class="text-sm text-gray-500 mt-1">Tra cứu thông tin định danh, truy vấn lịch sử đơn hàng & chi tiêu, và chặn tài khoản gian lận (Blacklist).</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex gap-3 items-center">
+                        <input type="text" id="cust-search-q" oninput="loadCustomers()" placeholder="Tìm kiếm khách hàng theo Họ tên, Số điện thoại hoặc Email..." class="flex-1 px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã KH & Họ Tên</th>
+                                        <th class="px-6 py-4">Số Điện Thoại & Email</th>
+                                        <th class="px-6 py-4">Địa Chỉ Mặc Định</th>
+                                        <th class="px-6 py-4">Tổng Đơn</th>
+                                        <th class="px-6 py-4">Tổng Chi Tiêu</th>
+                                        <th class="px-6 py-4">Trạng Thái TK</th>
+                                        <th class="px-6 py-4 text-right">Thao Tác Mở Rộng</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-customers" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin UC 4: Quản lý chương trình khuyến mãi (Voucher) -->
+                <div id="tab-vouchers" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Chương trình Khuyến mãi (Voucher)</h1>
+                            <p class="text-sm text-gray-500 mt-1">Khởi tạo chiến dịch giảm giá, theo dõi số lượt sử dụng và tự động vô hiệu hóa khi hết hạn/hết lượt.</p>
+                        </div>
+                        <button onclick="openModal('modal-add-voucher')" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 shrink-0">
+                            <i class="fa-solid fa-plus"></i> + Tạo Voucher Mới
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
+                        <input type="text" id="vouch-search-q" oninput="loadVouchers()" placeholder="Tra cứu theo mã Code Voucher (VD: SALE50K)..." class="flex-1 min-w-[200px] px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                        <select id="vouch-filter-status" onchange="loadVouchers()" class="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold bg-gray-50">
+                            <option value="TAT_CA">Tất cả chiến dịch</option>
+                            <option value="DANG_HOAT_DONG">Đang chạy (Hoạt động)</option>
+                            <option value="VO_HIEU_HOA">Đã kết thúc / Vô hiệu hóa</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã KM</th>
+                                        <th class="px-6 py-4">Code Voucher</th>
+                                        <th class="px-6 py-4">Loại Giảm</th>
+                                        <th class="px-6 py-4">Giá Trị Giảm</th>
+                                        <th class="px-6 py-4">Đơn Tối Thiểu</th>
+                                        <th class="px-6 py-4">Đã Dùng / Tối Đa</th>
+                                        <th class="px-6 py-4">Thời Hạn Áp Dụng</th>
+                                        <th class="px-6 py-4">Trạng Thái</th>
+                                        <th class="px-6 py-4 text-right">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-vouchers" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin UC 5: Quản lý thông tin nhà cung cấp -->
+                <div id="tab-suppliers" class="tab-pane hidden space-y-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Hồ sơ Nhà Cung Cấp</h1>
+                            <p class="text-sm text-gray-500 mt-1">Lưu trữ đối tác cung ứng nguồn hàng, lịch sử giao dịch nhập kho và kiểm soát trạng thái hợp tác.</p>
+                        </div>
+                        <button onclick="openModal('modal-add-supplier')" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> + Thêm Nhà Cung Cấp
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã NCC</th>
+                                        <th class="px-6 py-4">Tên Đối Tác / Xưởng May</th>
+                                        <th class="px-6 py-4">Người Liên Hệ & SĐT</th>
+                                        <th class="px-6 py-4">Email & Địa Chỉ</th>
+                                        <th class="px-6 py-4">Lịch Sử Nhập Hàng</th>
+                                        <th class="px-6 py-4">Trạng Thái Hợp Tác</th>
+                                        <th class="px-6 py-4 text-right">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-suppliers" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin UC 6: Cấu hình các quy tắc và chính sách -->
+                <div id="tab-policies" class="tab-pane hidden space-y-6 max-w-4xl">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Cấu hình Quy tắc & Chính sách Hệ thống</h1>
+                        <p class="text-sm text-gray-500 mt-1">Thiết lập tham số vận hành toàn sàn E-Commerce và quản lý khóa kết nối API đối tác bên ngoài.</p>
+                    </div>
+
+                    <form id="form-policy-config" class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-6 sm:p-8 space-y-6">
+                        <div>
+                            <h3 class="text-sm font-bold text-black uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">1. Quy định Vận chuyển, Đổi trả & Cảnh báo Kho</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1.5">Thời hạn đổi trả tối đa (Ngày)</label>
+                                    <input type="number" id="policy-return-days" min="1" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white" required>
+                                    <p class="text-[11px] text-gray-400 mt-1">Số ngày cho phép khách gửi yêu cầu đổi trả kể từ ngày nhận hàng.</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1.5">Ngưỡng cảnh báo tồn kho tối thiểu (Chiếc)</label>
+                                    <input type="number" id="policy-min-stock" min="1" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white" required>
+                                    <p class="text-[11px] text-gray-400 mt-1">Hệ thống phát cảnh báo đỏ cho Thủ kho khi tồn khả dụng chạm mốc này.</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1.5">Phí vận chuyển mặc định (VNĐ)</label>
+                                    <input type="number" id="policy-ship-fee" min="0" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1.5">Ngưỡng đơn hàng miễn phí giao - Freeship (VNĐ)</label>
+                                    <input type="number" id="policy-freeship" min="0" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:bg-white" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-sm font-bold text-black uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">2. Cấu hình Khóa Kết Nối API Dịch Vụ Bên Ngoài (External Systems)</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">API Cổng Thanh Toán (VNPay / MoMo)</label>
+                                    <input type="text" id="policy-api-payment" class="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">API Đơn Vị Vận Chuyển (GHN / GHTK)</label>
+                                    <input type="text" id="policy-api-shipping" class="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1">API Dịch Vụ Email (Email Service)</label>
+                                    <input type="text" id="policy-api-email" class="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-3 border-t border-gray-100 flex justify-end">
+                            <button type="submit" class="px-6 py-2.5 bg-black hover:bg-gray-800 text-white text-xs font-bold rounded-xl shadow-sm transition-colors">
+                                <i class="fa-solid fa-floppy-disk mr-1.5"></i> Lưu & Áp Dụng Chính Sách Toàn Hệ Thống
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+
+                <!-- ===================================================================== -->
+                <!-- II. CÁC MÀN HÌNH NHÂN VIÊN VẬN HÀNH (NV_VAN_HANH)                      -->
+                <!-- ===================================================================== -->
+
+                <!-- Ops UC 1: Xử lý đơn hàng -->
+                <div id="tab-ops-orders" class="tab-pane hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Tiếp Nhận & Xử Lý Đơn Hàng</h1>
+                        <p class="text-sm text-gray-500 mt-1">Kiểm tra thông tin nhận hàng, tình trạng thanh toán và đối chiếu tồn kho SKU để Duyệt đơn hoặc Từ chối đơn.</p>
+                    </div>
+
+                    <!-- Tìm kiếm & Bộ lọc trạng thái -->
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex flex-wrap gap-3 items-center justify-between">
+                        <div class="flex gap-1.5 flex-wrap text-xs">
+                            <button onclick="filterOpsOrders('TAT_CA', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-black text-white font-semibold">Tất cả đơn</button>
+                            <button onclick="filterOpsOrders('CHO_DUYET', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Chờ duyệt</button>
+                            <button onclick="filterOpsOrders('DANG_DONG_GOI', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Đang đóng gói</button>
+                            <button onclick="filterOpsOrders('DANG_GIAO', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Đang giao</button>
+                            <button onclick="filterOpsOrders('DA_GIAO', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Đã giao</button>
+                            <button onclick="filterOpsOrders('DA_HUY', this)" class="btn-ops-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Đã hủy</button>
+                        </div>
+                        <input type="text" id="ops-order-search" oninput="loadOpsOrders()" placeholder="Tìm theo Mã đơn (DH...) hoặc SĐT khách..." class="w-full sm:w-64 px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-5 py-4">Mã Đơn & Ngày Đặt</th>
+                                        <th class="px-5 py-4">Khách Hàng & SĐT</th>
+                                        <th class="px-5 py-4">Sản Phẩm & Đối Soát Tồn Kho</th>
+                                        <th class="px-5 py-4">Thanh Toán</th>
+                                        <th class="px-5 py-4">Trạng Thái</th>
+                                        <th class="px-5 py-4 text-right">Thao Tác Xử Lý Đơn</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-ops-orders" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ops UC 2: In tem thông tin đơn hàng (Pick-list & Shipping Label) -->
+                <div id="tab-ops-labels" class="tab-pane hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">In Tem Vận Đơn & Phiếu Soạn Hàng (Pick-list)</h1>
+                        <p class="text-sm text-gray-500 mt-1">Trích xuất Phiếu soạn hàng (Pick-list) có vị trí kệ cho Thủ kho và Tem vận đơn (Shipping Label) chứa mã vạch dán kiện hàng.</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã Đơn Hàng</th>
+                                        <th class="px-6 py-4">Mã Vận Đơn & ĐVVC</th>
+                                        <th class="px-6 py-4">Người Nhận & Địa Chỉ Giao</th>
+                                        <th class="px-6 py-4">Danh Sách SKU & Vị Trí Kệ</th>
+                                        <th class="px-6 py-4">Trạng Thái</th>
+                                        <th class="px-6 py-4 text-right">Trích Xuất & In Ấn</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-ops-labels" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ops UC 3: Theo dõi và cập nhật vận đơn -->
+                <div id="tab-ops-tracking" class="tab-pane hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Theo Dõi Lộ Trình & Cập Nhật Vận Đơn</h1>
+                        <p class="text-sm text-gray-500 mt-1">Đồng bộ trạng thái giao hàng thời gian thực qua Webhook/API với ĐVVC và can thiệp xử lý sự cố giao hàng.</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã Vận Đơn / Đơn Hàng</th>
+                                        <th class="px-6 py-4">Khách Nhận & SĐT</th>
+                                        <th class="px-6 py-4">Đối Tác Vận Chuyển</th>
+                                        <th class="px-6 py-4">Ghi Chú Hành Trình Mới Nhất</th>
+                                        <th class="px-6 py-4">Trạng Thái Vận Đơn</th>
+                                        <th class="px-6 py-4 text-right">Đồng Bộ & Cập Nhật</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-ops-tracking" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ops UC 4: Xử lý khiếu nại và đổi trả -->
+                <div id="tab-ops-returns" class="tab-pane hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Tiếp Nhận & Xử Lý Khiếu Nại Đổi Trả</h1>
+                        <p class="text-sm text-gray-500 mt-1">Thẩm định lý do, kiểm tra hình ảnh minh chứng, đối chiếu thời hạn chính sách để duyệt tạo mã vận đơn thu hồi hoặc từ chối.</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-5 py-4">Mã YC & Đơn Gốc</th>
+                                        <th class="px-5 py-4">Khách Hàng</th>
+                                        <th class="px-5 py-4">Lý Do & Ảnh Minh Chứng</th>
+                                        <th class="px-5 py-4">Kiểm Tra Chính Sách</th>
+                                        <th class="px-5 py-4">Phương Án & Mã Thu Hồi</th>
+                                        <th class="px-5 py-4">Trạng Thái</th>
+                                        <th class="px-5 py-4 text-right">Thẩm Định</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-ops-returns" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- ===================================================================== -->
+                <!-- III. CÁC MÀN HÌNH NHÂN VIÊN KHO / THỦ KHO (NV_KHO)                     -->
+                <!-- ===================================================================== -->
+
+                <!-- WH UC 1: Quản lý thông tin SKU (Bộ từ điển dữ liệu sản phẩm) -->
+                <div id="tab-wh-skus" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Thông tin SKU (Từ điển Sản phẩm)</h1>
+                            <p class="text-sm text-gray-500 mt-1">Khởi tạo và định nghĩa các thuộc tính cốt lõi của mặt hàng (Mã SKU, tên gọi, phân loại, màu sắc, bảng size, mã vạch).</p>
+                        </div>
+                        <button onclick="openCreateSkuModal()" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 shrink-0">
+                            <i class="fa-solid fa-plus"></i> + Khởi Tạo Mã SKU Mới
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex gap-3 items-center">
+                        <input type="text" id="sku-dict-search" oninput="loadWhSkus()" placeholder="Tra cứu từ điển SKU theo Mã SKU, Tên sản phẩm hoặc Mã vạch Barcode..." class="flex-1 px-3.5 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã SKU</th>
+                                        <th class="px-6 py-4">Tên Sản Phẩm & Phân Loại</th>
+                                        <th class="px-6 py-4">Bảng Size / Màu Sắc</th>
+                                        <th class="px-6 py-4">Mã Vạch Barcode</th>
+                                        <th class="px-6 py-4">Giá Vốn</th>
+                                        <th class="px-6 py-4">Giá Bán Niêm Yết</th>
+                                        <th class="px-6 py-4 text-right">Cập Nhật Thuộc Tính</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-wh-skus" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WH UC 2: Quản lý tồn kho -->
+                <div id="tab-wh-inventory" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Tồn Kho & Cảnh Báo Định Mức</h1>
+                            <p class="text-sm text-gray-500 mt-1">Tra cứu số lượng tồn theo SKU, cập nhật giá bán/giá vốn, thiết lập mức tồn tối thiểu và tự động ẩn trên Web khi hết hàng.</p>
+                        </div>
+                    </div>
+
+                    <!-- Ô quét Barcode / Tìm mã SKU -->
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 p-4 flex items-center gap-3">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-barcode absolute left-3.5 top-2.5 text-gray-400"></i>
+                            <input type="text" id="wh-inv-search" oninput="loadWhInventory()" placeholder="Quét mã vạch (Barcode) hoặc nhập mã SKU / Vị trí kệ để lọc tức thì..." class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50 focus:bg-white">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-5 py-4">Mã SKU & Sản Phẩm</th>
+                                        <th class="px-5 py-4">Size / Màu</th>
+                                        <th class="px-5 py-4">Giá Vốn / Giá Bán</th>
+                                        <th class="px-5 py-4">Tồn Thực Tế</th>
+                                        <th class="px-5 py-4">Tạm Giữ</th>
+                                        <th class="px-5 py-4">Khả Dụng</th>
+                                        <th class="px-5 py-4">Mức Tối Thiểu</th>
+                                        <th class="px-5 py-4">Trạng Thái Web & Kho</th>
+                                        <th class="px-5 py-4 text-right">Cập Nhật</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-wh-inventory" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WH UC 3: Quản lý vị trí lưu kho -->
+                <div id="tab-wh-locations" class="tab-pane hidden space-y-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Quản lý Vị Trí Lưu Kho (Sơ đồ Khu vực - Tầng - Kệ)</h1>
+                            <p class="text-sm text-gray-500 mt-1">Định danh không gian lưu trữ (Khu vực, Tầng, Kệ hàng) và gắn liên kết mã SKU vào kệ để tối ưu hóa thời gian soạn hàng.</p>
+                        </div>
+                        <button onclick="openLocationModal()" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> + Thêm Vị Trí Lưu Kho
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã Vị Trí</th>
+                                        <th class="px-6 py-4">Khu Vực</th>
+                                        <th class="px-6 py-4">Tầng</th>
+                                        <th class="px-6 py-4">Kệ Hàng</th>
+                                        <th class="px-6 py-4">Mã SKU Đang Phân Bổ</th>
+                                        <th class="px-6 py-4">Số Lượng Trên Kệ</th>
+                                        <th class="px-6 py-4 text-right">Thao Tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-wh-locations" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WH UC 4 & 5: Lập phiếu nhập kho & Lập phiếu xuất kho -->
+                <div id="tab-wh-receipts" class="tab-pane hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900">Lập Phiếu Nhập Kho & Phiếu Xuất Kho</h1>
+                            <p class="text-sm text-gray-500 mt-1">Ghi nhận lô hàng nhập từ Nhà cung cấp (cộng tồn kho) và xuất hàng bàn giao đóng gói/vận hành (khấu trừ tồn kho).</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="openCreateReceiptModal('NHAP_KHO')" class="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-2xs">
+                                <i class="fa-solid fa-arrow-down"></i> + Lập Phiếu Nhập Kho
+                            </button>
+                            <button onclick="openCreateReceiptModal('XUAT_KHO')" class="text-xs font-semibold text-white bg-black hover:bg-gray-800 px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-2xs">
+                                <i class="fa-solid fa-arrow-up"></i> + Lập Phiếu Xuất Kho
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 text-xs">
+                        <button onclick="filterWhReceipts('TAT_CA', this)" class="btn-wh-filter px-3.5 py-2 rounded-xl bg-black text-white font-semibold">Tất cả chứng từ</button>
+                        <button onclick="filterWhReceipts('NHAP_KHO', this)" class="btn-wh-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-medium">Phiếu Nhập Kho (PNK)</button>
+                        <button onclick="filterWhReceipts('XUAT_KHO', this)" class="btn-wh-filter px-3.5 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-medium">Phiếu Xuất Kho (PXK)</button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-2xs border border-gray-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">Mã Phiếu</th>
+                                        <th class="px-6 py-4">Loại Chứng Từ</th>
+                                        <th class="px-6 py-4">Thủ Kho Lập</th>
+                                        <th class="px-6 py-4">Nhà Cung Cấp / Bộ Phận Nhận</th>
+                                        <th class="px-6 py-4">Chi Tiết Mặt Hàng SKU</th>
+                                        <th class="px-6 py-4">Tổng Giá Trị</th>
+                                        <th class="px-6 py-4">Ngày Lập & Ghi Chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-wh-receipts" class="divide-y divide-gray-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+
+    <!-- ===================================================================== -->
+    <!-- HỆ THỐNG MODALS NGHIỆP VỤ CHI TIẾT                                    -->
+    <!-- ===================================================================== -->
+
+    <!-- Modal 1: Hồ sơ cá nhân & Đổi mật khẩu -->
+    <div id="modal-admin-profile" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-gray-100">
+            <div class="flex justify-between items-center mb-5">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">Hồ Sơ Cá Nhân & Đổi Mật Khẩu</h3>
+                    <p class="text-xs text-gray-500">Quản lý thông tin định danh tài khoản đang đăng nhập</p>
+                </div>
+                <button onclick="closeModal('modal-admin-profile')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <form id="form-update-profile" class="space-y-3 mb-5 pb-5 border-b border-gray-100">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Họ và tên</label>
+                    <input type="text" id="profile-name" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Email định danh</label>
+                    <input type="email" id="profile-email" class="w-full px-3.5 py-2 border border-gray-200 bg-gray-50 rounded-xl text-xs text-gray-500" disabled>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Số điện thoại</label>
+                    <input type="text" id="profile-phone" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                </div>
+                <button type="submit" class="w-full py-2 bg-gray-100 hover:bg-gray-200 text-black rounded-xl text-xs font-semibold">Lưu Thông Tin Hồ Sơ</button>
+            </form>
+            <form id="form-change-password" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                    <input type="password" id="pw-old" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+                    <input type="password" id="pw-new" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Xác nhận mật khẩu mới</label>
+                    <input type="password" id="pw-confirm" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <button type="submit" class="w-full py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-bold">Đổi Mật Khẩu</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: Quên mật khẩu -->
+    <div id="modal-forgot-password" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl border border-gray-100">
+            <h3 class="text-base font-bold text-gray-900 mb-1">Khôi Phục Mật Khẩu Nội Bộ</h3>
+            <p class="text-xs text-gray-500 mb-4">Nhập email định danh để hệ thống gửi thông tin khôi phục qua Email Service API.</p>
+            <form id="form-forgot-pass" class="space-y-4">
+                <input type="email" id="forgot-email" class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm" placeholder="email@fashionshop.vn" required>
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-forgot-password')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Gửi Email Khôi Phục</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 3: Thêm / Sửa Nhân Viên -->
+    <div id="modal-add-employee" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="emp-modal-title">Cấp Tài Khoản Nhân Sự & Gửi Email</h3>
+                <button onclick="closeModal('modal-add-employee')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-add-employee" class="space-y-3.5">
+                <input type="hidden" id="emp-edit-mode" value="CREATE">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Nhân Viên (ID)</label>
+                    <input type="text" id="emp-id" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="VD: NV005">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Họ và Tên</label>
+                    <input type="text" id="emp-name" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Nguyễn Văn A">
+                </div>
+                <div id="emp-email-group">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Email Công Ty (Nhận thông tin đăng nhập)</label>
+                    <input type="email" id="emp-email" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="vana@fashionshop.vn">
+                </div>
+                <div id="emp-pass-group">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mật Khẩu Khởi Tạo</label>
+                    <input type="password" id="emp-pass" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" placeholder="••••••••">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Số Điện Thoại</label>
+                    <input type="text" id="emp-phone" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" placeholder="0901234567">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Phân Quyền Vai Trò</label>
+                    <select id="emp-role" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold">
+                        <option value="NV_VAN_HANH">Nhân viên Vận hành đơn hàng</option>
+                        <option value="NV_KHO">Nhân viên Kho (Thủ kho)</option>
+                        <option value="ADMIN">Quản trị viên (Admin)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-add-employee')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu & Gửi Email</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 4: Xem Lịch Sử Đơn Hàng Của Khách Hàng (CRM) -->
+    <div id="modal-customer-orders" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-100 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <div>
+                    <h3 class="text-base font-bold text-gray-900" id="cust-history-title">Lịch Sử Đặt Hàng & Chi Tiêu Khách Hàng</h3>
+                    <p class="text-xs text-gray-500" id="cust-history-sub"></p>
+                </div>
+                <button onclick="closeModal('modal-customer-orders')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div class="overflow-y-auto flex-1 space-y-3" id="cust-history-body"></div>
+        </div>
+    </div>
+
+    <!-- Modal 5: Tạo / Sửa Voucher -->
+    <div id="modal-add-voucher" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="vouch-modal-title">Thiết Lập Chiến Dịch Voucher</h3>
+                <button onclick="closeModal('modal-add-voucher')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-add-voucher" class="space-y-3.5">
+                <input type="hidden" id="vouch-edit-mode" value="CREATE">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Code Voucher</label>
+                    <input type="text" id="vouch-code" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs uppercase font-mono font-bold" required placeholder="VD: SALE50K">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Hình thức giảm</label>
+                        <select id="vouch-type" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                            <option value="SO_TIEN">Tiền mặt (VNĐ)</option>
+                            <option value="PHAN_TRAM">Phần trăm (%)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Giá trị giảm</label>
+                        <input type="number" id="vouch-val" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="50000">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Đơn tối thiểu (VNĐ)</label>
+                        <input type="number" id="vouch-min" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Giới hạn lượt tối đa</label>
+                        <input type="number" id="vouch-max" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" value="100">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Ngày bắt đầu</label>
+                        <input type="date" id="vouch-start" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Ngày kết thúc</label>
+                        <input type="date" id="vouch-end" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-add-voucher')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Chiến Dịch</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 6: Thêm / Sửa Nhà Cung Cấp -->
+    <div id="modal-add-supplier" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="ncc-modal-title">Lưu Hồ Sơ Nhà Cung Cấp</h3>
+                <button onclick="closeModal('modal-add-supplier')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-add-supplier" class="space-y-3.5">
+                <input type="hidden" id="ncc-edit-mode" value="CREATE">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Nhà Cung Cấp</label>
+                    <input type="text" id="ncc-id" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono uppercase" required placeholder="VD: NCC05">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Tên Doanh Nghiệp / Đối Tác</label>
+                    <input type="text" id="ncc-name" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Tổng Công ty May 10">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Người Đại Diện Liên Hệ</label>
+                    <input type="text" id="ncc-contact" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" placeholder="Nguyễn Văn B">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Số Điện Thoại</label>
+                        <input type="text" id="ncc-phone" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                        <input type="email" id="ncc-email" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Địa Chỉ Kho / Xưởng</label>
+                    <input type="text" id="ncc-addr" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-add-supplier')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Hồ Sơ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 7: Xem Chi Tiết Đơn Hàng & Đối Chiếu Tồn Kho (NV Vận Hành) -->
+    <div id="modal-ops-order-detail" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900" id="detail-order-title">Chi Tiết Đơn Hàng & Đối Soát Tồn Kho</h3>
+                    <p class="text-xs text-gray-500" id="detail-order-sub"></p>
+                </div>
+                <button onclick="closeModal('modal-ops-order-detail')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div id="detail-order-body" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <!-- Modal 8: In Phiếu Soạn Hàng (Pick-list) & Tem Vận Đơn (Shipping Label) -->
+    <div id="modal-print-label" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-gray-200 max-h-[92vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100 no-print">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">Xem Trước Bản In: Phiếu Soạn Hàng (Pick-list) & Tem Vận Đơn</h3>
+                    <p class="text-xs text-gray-500">Kiểm tra mã vạch vận đơn, vị trí kệ lấy hàng và xác nhận gửi lệnh in hoặc tải PDF</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.print()" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-bold hover:bg-gray-800 flex items-center gap-1.5">
+                        <i class="fa-solid fa-print"></i> In Ngay / Tải PDF
+                    </button>
+                    <button onclick="closeModal('modal-print-label')" class="px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600">&times; Đóng</button>
+                </div>
+            </div>
+            <div id="print-label-content" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <!-- Modal 9: Theo dõi Lộ trình & Cập nhật trạng thái vận đơn / Sự cố -->
+    <div id="modal-ops-tracking" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <div>
+                    <h3 class="text-base font-bold text-gray-900" id="tracking-modal-title">Lộ Trình Kiện Hàng & Cập Nhật Sự Cố</h3>
+                    <p class="text-xs text-gray-500" id="tracking-modal-sub"></p>
+                </div>
+                <button onclick="closeModal('modal-ops-tracking')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div class="mb-4">
+                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Lịch sử hành trình vận đơn:</p>
+                <div id="tracking-timeline-box" class="bg-gray-50 rounded-2xl p-3.5 border border-gray-200/80 space-y-2 max-h-44 overflow-y-auto text-xs"></div>
+            </div>
+            <form id="form-update-tracking" class="space-y-3.5 pt-2 border-t border-gray-100">
+                <input type="hidden" id="tracking-order-id">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Cập nhật trạng thái vận đơn</label>
+                    <select id="tracking-new-status" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold">
+                        <option value="DANG_GIAO">Đang giao hàng (Bình thường)</option>
+                        <option value="HEN_GIAO_LAI">Sự cố: Khách hẹn lại ngày giao</option>
+                        <option value="GIAO_THAT_BAI">Sự cố: Giao thất bại / Sai số điện thoại</option>
+                        <option value="DA_GIAO">Hoàn tất: Đã giao hàng thành công</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Ghi chú xử lý sự cố / Lộ trình</label>
+                    <input type="text" id="tracking-incident-note" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="VD: Khách hẹn giao lại vào sáng mai 9h00...">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-ops-tracking')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Đóng</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Trạng Thái Vận Đơn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 10: Thẩm định Yêu cầu Khiếu nại & Đổi trả -->
+    <div id="modal-ops-return-detail" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <h3 class="text-base font-bold text-gray-900">Thẩm Định Hồ Sơ Khiếu Nại / Đổi Trả</h3>
+                <button onclick="closeModal('modal-ops-return-detail')" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div id="return-detail-info" class="space-y-3 mb-4 text-xs"></div>
+            <form id="form-process-return" class="space-y-3 pt-3 border-t border-gray-100">
+                <input type="hidden" id="return-modal-id">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Quyết định thẩm định</label>
+                    <select id="return-decision" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold">
+                        <option value="APPROVE">Duyệt yêu cầu (Tạo mã vận đơn thu hồi & Đổi mới/Hoàn tiền)</option>
+                        <option value="REJECT">Từ chối yêu cầu (Vi phạm chính sách / Quá hạn)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Phương án giải quyết</label>
+                    <select id="return-resolution" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                        <option value="Đổi sản phẩm mới cùng mã SKU">Đổi sản phẩm mới cùng mã SKU</option>
+                        <option value="Thu hồi hàng lỗi & Hoàn tiền 100% cho khách">Thu hồi hàng lỗi & Hoàn tiền 100% cho khách</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Ghi chú thẩm định / Lý do</label>
+                    <input type="text" id="return-note" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Nhập ghi chú thẩm định hoặc lý do từ chối...">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('modal-ops-return-detail')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Xác Nhận Kết Quả Thẩm Định</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 11: Thêm / Sửa SKU (Thủ kho - Quản lý thông tin SKU) -->
+    <div id="modal-add-sku" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="sku-modal-title">Khởi Tạo Mã Biến Thể SKU Mới</h3>
+                <button onclick="closeModal('modal-add-sku')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-add-sku" class="space-y-3.5">
+                <input type="hidden" id="sku-edit-mode" value="CREATE">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã SKU Định Danh</label>
+                    <input type="text" id="sku-code" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs uppercase font-mono font-bold" required placeholder="VD: SKU-AT05-DEN-XL">
+                </div>
+                <div id="sku-prod-group">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Thuộc Sản Phẩm Gốc</label>
+                    <select id="sku-prod-id" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Bảng Size (Kích cỡ)</label>
+                        <input type="text" id="sku-size" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="S, M, L, XL...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Màu Sắc</label>
+                        <input type="text" id="sku-color" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Đen, Trắng...">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Vạch Barcode</label>
+                    <input type="text" id="sku-barcode" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono" required placeholder="8938501099">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Giá Vốn (VNĐ)</label>
+                        <input type="number" id="sku-cost" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required value="120000">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Giá Bán Niêm Yết (VNĐ)</label>
+                        <input type="number" id="sku-price" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required value="250000">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Mức Tồn Tối Thiểu</label>
+                        <input type="number" id="sku-min-stock" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" value="5">
+                    </div>
+                    <div id="sku-rack-group">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Kệ Lưu Kho Mặc Định</label>
+                        <input type="text" id="sku-rack" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono" value="KE-A1-T1">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-add-sku')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Thông Tin SKU</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 12: Cập nhật Giá vốn, Giá bán & Mức tồn tối thiểu (UC Quản lý tồn kho) -->
+    <div id="modal-stock-config" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="stock-cfg-title">Cập Nhật Giá & Định Mức Tồn</h3>
+                <button onclick="closeModal('modal-stock-config')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-stock-config" class="space-y-3.5">
+                <input type="hidden" id="stock-cfg-sku">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Giá Vốn Nhập (VNĐ)</label>
+                    <input type="number" id="stock-cfg-cost" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Giá Bán Niêm Yết (VNĐ)</label>
+                    <input type="number" id="stock-cfg-price" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mức Tồn Kho Tối Thiểu (Ngưỡng cảnh báo)</label>
+                    <input type="number" id="stock-cfg-min" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" required>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-stock-config')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Cập Nhật</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 13: Thêm / Cập nhật Vị trí lưu kho (UC Quản lý vị trí lưu kho) -->
+    <div id="modal-wh-location" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="loc-modal-title">Quản Lý Vị Trí Lưu Kho</h3>
+                <button onclick="closeModal('modal-wh-location')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-wh-location" class="space-y-3.5">
+                <input type="hidden" id="loc-edit-mode" value="CREATE">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Vị Trí Lưu Kho</label>
+                    <input type="text" id="loc-id" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono uppercase font-bold" required placeholder="VD: KE-E1-T2">
+                </div>
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Khu Vực</label>
+                        <input type="text" id="loc-area" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Khu A">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Tầng</label>
+                        <input type="text" id="loc-floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Tầng 1">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Kệ Hàng</label>
+                        <input type="text" id="loc-rack" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs" required placeholder="Kệ A1">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Gắn Kết Mã SKU Lưu Trữ Tại Vị Trí Này</label>
+                    <select id="loc-sku-select" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs"></select>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-wh-location')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold">Lưu Vị Trí Kho</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 14: Lập Phiếu Nhập Kho / Phiếu Xuất Kho -->
+    <div id="modal-create-receipt" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-900" id="receipt-modal-title">Lập Phiếu Kho</h3>
+                <button onclick="closeModal('modal-create-receipt')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form id="form-create-receipt" class="space-y-3.5">
+                <input type="hidden" id="receipt-type" value="NHAP_KHO">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Mã Phiếu (Để trống sẽ tự sinh)</label>
+                        <input type="text" id="receipt-code" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono uppercase" placeholder="VD: PNK-202611-05">
+                    </div>
+                    <div id="receipt-ncc-group">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Nhà Cung Cấp</label>
+                        <select id="receipt-ncc" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs"></select>
+                    </div>
+                    <div id="receipt-export-reason-group" class="hidden">
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Lý Do Xuất Kho</label>
+                        <select id="receipt-export-reason" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs">
+                            <option value="Xuất bàn giao đóng gói đơn hàng">Xuất bàn giao đóng gói đơn hàng</option>
+                            <option value="Xuất đổi trả sản phẩm mới cho khách">Xuất đổi trả sản phẩm mới cho khách</option>
+                            <option value="Xuất hủy hàng lỗi / Hư hỏng">Xuất hủy hàng lỗi / Hư hỏng</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="receipt-receiver-group" class="hidden">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Đơn Hàng Hoặc Bộ Phận Nhận Hàng</label>
+                    <input type="text" id="receipt-receiver" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" placeholder="VD: Bộ phận Đóng gói Vận hành - Đơn DH20261106">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Chọn Mặt Hàng SKU</label>
+                    <select id="receipt-sku" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-medium" required></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Số Lượng (Chiếc)</label>
+                        <input type="number" id="receipt-qty" oninput="updateReceiptTotalPreview()" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-bold" min="1" value="10" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Đơn Giá Vốn / Xuất (VNĐ)</label>
+                        <input type="number" id="receipt-unit-price" oninput="updateReceiptTotalPreview()" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-bold" value="280000" required>
+                    </div>
+                </div>
+                <div class="p-3 bg-gray-50 rounded-xl border border-gray-200 flex justify-between items-center">
+                    <span class="text-xs font-semibold text-gray-600">Tổng giá trị chứng từ dự kiến:</span>
+                    <span class="text-sm font-black text-black" id="receipt-total-preview">2.800.000 ₫</span>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Ghi Chú Chứng Từ</label>
+                    <input type="text" id="receipt-note" class="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs" placeholder="Nhập ghi chú kiểm kê lô hàng...">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                    <button type="button" onclick="closeModal('modal-create-receipt')" class="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold" id="receipt-submit-btn">Xác Nhận Lưu & Cập Nhật Tồn Kho</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
