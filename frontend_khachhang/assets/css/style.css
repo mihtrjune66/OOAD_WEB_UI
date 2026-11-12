@@ -1,0 +1,33 @@
+body { font-family: 'Inter', sans-serif; }
+.font-display { font-family: 'Playfair Display', serif; }
+
+/* Trang cổng thanh toán mô phỏng: ẩn header/footer của website */
+body.bare #site-header, body.bare #site-footer { display: none; }
+
+/* Hiệu ứng */
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes popIn { from { opacity: 0; transform: translateY(12px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes toastIn { from { opacity: 0; transform: translateX(16px) } to { opacity: 1; transform: none } }
+.fade-in { animation: fadeIn .2s ease-out }
+.pop-in { animation: popIn .22s ease-out }
+.toast-in { animation: toastIn .25s ease-out; transition: all .3s }
+
+/* Size đã hết hàng: gạch chéo */
+.size-out::after { content: ''; position: absolute; left: 10%; right: 10%; top: 50%; height: 1.5px; background: #d1d5db; transform: rotate(-20deg); }
+
+/* Ẩn mũi tên của input number */
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0 }
+input[type=number] { -moz-appearance: textfield }
+
+details > summary { list-style: none }
+details > summary::-webkit-details-marker { display: none }
+details > summary::after { content: '+'; float: right; font-weight: 400; color: #9ca3af }
+details[open] > summary::after { content: '–' }
+
+/* In hóa đơn điện tử */
+@media print {
+  body * { visibility: hidden !important; }
+  #print-area, #print-area * { visibility: visible !important; }
+  #print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+  .no-print { display: none !important; }
+}

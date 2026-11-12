@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Chic® – Thời trang Streetwear & Minimalist</title>
+    <meta name="description" content="Urban Chic – Phân hệ 1: Quản lý mua sắm online dành cho Khách hàng (đồ án OOAD).">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], display: ['"Playfair Display"', 'serif'] } } } };
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Ctext x='16' y='22' font-family='Arial' font-weight='900' font-size='16' fill='%23fff' text-anchor='middle'%3EUC%3C/text%3E%3C/svg%3E">
+</head>
+<body class="bg-white text-gray-900 antialiased min-h-screen">
+    <header id="site-header" class="sticky top-0 z-40"></header>
+    <main id="app" class="min-h-[60vh]"></main>
+    <footer id="site-footer"></footer>
+
+    <div id="modal-root"></div>
+    <div id="toast-root" class="fixed top-20 right-4 z-[100] space-y-2"></div>
+    <div id="demo-root"></div>
+
+    <!-- Dữ liệu mẫu → Tầng tiện ích → Controller/Entity → Giao diện (Boundary) → Điều hướng -->
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/ui.js"></script>
+    <script src="assets/js/controllers.js"></script>
+    <script src="assets/js/views-shop.js"></script>
+    <script src="assets/js/views-auth.js"></script>
+    <script src="assets/js/views-account.js"></script>
+    <script src="assets/js/views-checkout.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>
