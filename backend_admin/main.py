@@ -1210,6 +1210,11 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# Phân hệ 1 – Web Storefront cho Khách hàng (frontend_khachhang/), truy cập tại /khach-hang/
+KHACH_HANG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend_khachhang")
+if os.path.isdir(KHACH_HANG_DIR):
+    app.mount("/khach-hang", StaticFiles(directory=KHACH_HANG_DIR, html=True), name="khach_hang")
+
 @app.get("/")
 def serve_home():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
