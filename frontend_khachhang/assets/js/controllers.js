@@ -35,13 +35,22 @@ const DB = {
       carts: s.carts, wishlists: s.wishlists, outbox: s.outbox, resetTokens: s.resetTokens, transactions: [], pendingCallbacks: [],
       session: null, sim: { emailFail: false, payInitFail: false, shipFail: false, slowCallback: false },
       seq: { customer: 6, order: 1120, mail: 10, ret: 44, addr: 10, txn: 1000 },
-      ui: { showUC: true, hideDemo: false },
+      ui: { showUC: false, hideDemo: true },
     };
   },
   load() {
     try {
       const raw = localStorage.getItem(this.KEY);
-      if (raw) { const d = JSON.parse(raw); if (d && d.version === 2) { this.data = d; return; } }
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && d.version === 2) {
+          // Luôn tắt hiển thị demo và nhãn use case để web hoàn toàn tự nhiên
+          if (!d.ui) d.ui = { showUC: false, hideDemo: true };
+          else { d.ui.showUC = false; d.ui.hideDemo = true; }
+          this.data = d;
+          return;
+        }
+      }
     } catch (e) { /* bỏ qua */ }
     this.reset();
   },
