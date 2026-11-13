@@ -190,7 +190,6 @@ V.gateway = ([ref]) => {
     html: `<div class="min-h-screen ${momo ? 'bg-pink-50' : 'bg-sky-50'}">
       <header class="${theme.bg} text-white"><div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">${theme.logo}<span class="text-xs text-white/80"><i class="fa-solid fa-lock mr-1"></i>Cổng thanh toán an toàn · ${momo ? 'payment.momo.vn' : 'sandbox.vnpayment.vn'}</span></div></header>
       <div class="max-w-4xl mx-auto px-4 py-8">
-        <div class="mb-3 flex flex-wrap gap-2 items-center justify-between"><span class="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 rounded-full px-2.5 py-1"><i class="fa-solid fa-flask mr-1"></i>Trang mô phỏng «hệ thống ngoài» CongMoMoVNPay – không phát sinh giao dịch thật</span>${UI.uc('UC19', 'Thanh toán điện tử')}</div>
         <div class="grid md:grid-cols-2 gap-6 bg-white rounded-3xl shadow-xl overflow-hidden">
           <div class="p-7">
             <p class="text-xs text-gray-500 uppercase tracking-wider">Thông tin đơn hàng</p>
@@ -212,17 +211,12 @@ V.gateway = ([ref]) => {
         </div>
         ${done ? `<div class="mt-6">${UI.alert('info', 'Giao dịch này đã được xử lý. <a class="underline font-bold" href="#/ket-qua-thanh-toan/' + ref + '">Xem kết quả</a>')}</div>` : `
         <div class="mt-6 bg-white rounded-2xl p-6 shadow">
-          <p class="text-sm font-bold">Giả lập thao tác của khách trên cổng ${theme.name}</p>
+          <p class="text-sm font-bold">Xác nhận giao dịch thanh toán trên cổng ${theme.name}</p>
           <div class="mt-4 grid sm:grid-cols-3 gap-3">
             <button onclick="V.gwAct('${ref}','THANH_CONG')" class="py-3 rounded-xl ${theme.bg} text-white font-bold text-sm"><i class="fa-solid fa-circle-check mr-1.5"></i>Xác nhận thanh toán</button>
             <button onclick="V.gwAct('${ref}','THAT_BAI')" class="py-3 rounded-xl border-2 border-red-200 text-red-600 font-bold text-sm"><i class="fa-solid fa-circle-xmark mr-1.5"></i>Thanh toán thất bại</button>
             <button onclick="V.gwAct('${ref}','HUY')" class="py-3 rounded-xl border-2 border-gray-200 font-bold text-sm">Hủy giao dịch</button>
           </div>
-          <details class="mt-4 text-xs text-gray-600"><summary class="cursor-pointer font-semibold">Công cụ kiểm thử luồng phụ</summary>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <label class="flex items-center gap-2 border rounded-lg px-3 py-2"><input type="checkbox" ${DB.data.sim.slowCallback ? 'checked' : ''} onchange="DB.data.sim.slowCallback=this.checked;DB.save()" class="accent-black"> Cổng gửi thông báo kết quả chậm (~6 giây)</label>
-              <button onclick="V.gwFake('${ref}')" class="border rounded-lg px-3 py-2 hover:border-black">Gửi thông báo giả mạo (sai chữ ký)</button>
-            </div></details>
         </div>`}
         <p class="text-center text-xs text-gray-500 mt-6"><a href="#/thanh-toan/${txn.orderId}" class="underline">← Quay lại Urban Chic</a></p>
       </div></div>`,
@@ -298,43 +292,4 @@ V.orderSuccess = ([id]) => {
       </div>
       <div class="mt-6 flex flex-wrap justify-center gap-3"><a href="#/tai-khoan/don-hang/${o.id}" class="bg-black text-white px-5 py-3 rounded-xl text-sm font-bold">Theo dõi đơn hàng</a><a href="#/san-pham" class="border border-gray-300 px-5 py-3 rounded-xl text-sm font-bold hover:border-black">Tiếp tục mua sắm</a></div>
     </div></div>`;
-};
-
-/* --------------------- Danh mục Use Case – hỗ trợ chụp báo cáo --------------------- */
-V.usecases = () => {
-  const L = [
-    ['UC01', 'Đăng ký tài khoản', 'Khách vãng lai', 'GiaoDienDangKy', '#/dang-ky', 'Trùng tên/email; mật khẩu yếu; Email API lỗi (bật ở bảng Demo)'],
-    ['UC02', 'Đăng nhập', 'Khách vãng lai / Khách hàng', 'GiaoDienDangNhap', '#/dang-nhap', 'Sai mật khẩu; tài khoản bị khóa (vankiet)'],
-    ['UC03', 'Quên mật khẩu', 'Khách hàng', 'GiaoDienKhoiPhuc', '#/quen-mat-khau', 'Email sai định dạng; liên kết hết hạn (Hộp thư mô phỏng); Email API lỗi'],
-    ['UC04', 'Tìm kiếm sản phẩm', 'Khách hàng', 'GiaoDienTimKiem', '#/san-pham?q=áo', 'Từ khóa không có kết quả (vd: "vest")'],
-    ['UC05', 'Lọc sản phẩm', 'Khách hàng', 'GiaoDienTimKiem', '#/san-pham?colors=Đen&sizes=L&max=500000', 'Khoảng giá sai (từ > đến); không có kết quả; bỏ bộ lọc'],
-    ['UC06', 'Xem chi tiết sản phẩm', 'Khách hàng', 'GiaoDienChiTiet', '#/san-pham/SP001', 'Biến thể hết hàng (Kem/S); sản phẩm không tồn tại'],
-    ['UC07', 'Xem khuyến mãi của sản phẩm', 'Khách hàng', 'GiaoDienChiTiet', '#/san-pham/SP001', 'Sản phẩm không có KM; mã hết hạn/hết lượt (FLASH100)'],
-    ['UC08', 'Thêm vào giỏ hàng', 'Khách hàng', 'GiaoDienChiTiet', '#/san-pham/SP005', 'Chưa chọn size; vượt tồn (Jeans Xanh Đậm/L còn 3)'],
-    ['UC09', 'Quản lý giỏ hàng', 'Khách hàng', 'GiaoDienGioHang', '#/gio-hang', 'Giỏ trống; đổi sang biến thể hết hàng; gộp dòng cùng SKU'],
-    ['UC10', 'Thêm vào mục yêu thích', 'Khách hàng', 'GiaoDienChiTiet', '#/san-pham/SP006', 'Chưa đăng nhập; sản phẩm đã có trong danh sách'],
-    ['UC11', 'Quản lý sản phẩm yêu thích', 'Khách thành viên', 'GiaoDienYeuThich', '#/tai-khoan/yeu-thich', 'Danh sách trống; sản phẩm hết hàng (Áo Khoác Da Biker)'],
-    ['UC12', 'Quản lý hồ sơ cá nhân', 'Khách thành viên', 'GiaoDienHoSo', '#/tai-khoan', 'Thiếu trường bắt buộc; sai mật khẩu cũ; một địa chỉ mặc định'],
-    ['UC13', 'Quản lý đơn hàng cá nhân', 'Khách thành viên', 'GiaoDienDonHang', '#/tai-khoan/don-hang', 'Chưa có hóa đơn; tải hóa đơn đơn đã giao; đổi trả'],
-    ['UC14', 'Hủy đơn', 'Khách thành viên', 'GiaoDienDonHang', '#/tai-khoan/don-hang/DH20261105', 'Đơn đang đóng gói bị từ chối (DH20261104); đơn VNPay → hoàn tiền (DH20261110)'],
-    ['UC15', 'Xem quá trình vận chuyển', 'Khách thành viên', 'GiaoDienTheoDoi', '#/tai-khoan/don-hang/DH20261103/van-chuyen', 'Chưa có mã vận đơn (DH20261104); API vận chuyển lỗi'],
-    ['UC16', 'Đặt hàng', 'Khách thành viên', 'GiaoDienDatHang', '#/dat-hang', 'Giỏ trống; voucher không hợp lệ; thiếu tồn; SĐT sai'],
-    ['UC17', 'Thanh toán', 'Khách thành viên', 'GiaoDienThanhToan', '#/tai-khoan/don-hang', 'Chưa chọn phương thức; đơn đã thanh toán'],
-    ['UC18', 'Thanh toán tiền mặt (COD)', 'Khách thành viên', 'GiaoDienThanhToan', '#/tai-khoan/don-hang', 'Đổi phương thức trước khi xác nhận'],
-    ['UC19', 'Thanh toán điện tử MoMo/VNPay', 'Khách thành viên', 'GiaoDienThanhToan', '#/tai-khoan/don-hang', 'Thất bại/hủy; cổng lỗi khởi tạo; callback chậm; chữ ký sai'],
-  ];
-  return `<div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-    ${UI.crumbs([['Trang chủ', '#/'], ['Danh mục Use Case', '']])}
-    <h1 class="font-display text-3xl font-bold mt-4">Phân hệ 1 – Quản lý mua sắm online (Khách hàng)</h1>
-    <p class="text-sm text-gray-500 mt-1">Bản đồ 19 use case → màn hình giao diện (lớp Boundary theo sơ đồ tuần tự). Bấm “Mở màn hình” để chụp hình minh họa cho báo cáo.</p>
-    <div class="mt-6 overflow-x-auto rounded-2xl border border-gray-200"><table class="w-full text-sm">
-      <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500"><tr><th class="px-4 py-3">Mã</th><th class="px-4 py-3">Use case</th><th class="px-4 py-3">Tác nhân</th><th class="px-4 py-3">Boundary</th><th class="px-4 py-3">Gợi ý chụp luồng phụ</th><th class="px-4 py-3"></th></tr></thead>
-      <tbody class="divide-y divide-gray-100">${L.map(([c, n, a, b, h, alt]) => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 font-bold">${c}</td><td class="px-4 py-3 font-semibold">${n}</td><td class="px-4 py-3 text-gray-600">${a}</td><td class="px-4 py-3 font-mono text-xs">${b}</td><td class="px-4 py-3 text-xs text-gray-600">${alt}</td><td class="px-4 py-3"><a href="${h}" class="whitespace-nowrap text-xs font-bold bg-black text-white rounded-lg px-3 py-2">Mở màn hình</a></td></tr>`).join('')}</tbody>
-    </table></div>
-    <div class="mt-6 grid md:grid-cols-3 gap-4 text-sm">
-      <div class="rounded-2xl bg-gray-50 p-5"><p class="font-bold">Tác nhân</p><p class="text-gray-600 mt-1">Khách vãng lai → Khách hàng → Khách thành viên (tổng quát hóa). Khách vãng lai vẫn tìm kiếm, xem chi tiết và dùng giỏ hàng; đặt hàng, hồ sơ, đơn hàng, yêu thích cần đăng nhập.</p></div>
-      <div class="rounded-2xl bg-gray-50 p-5"><p class="font-bold">Hệ thống ngoài (mô phỏng)</p><p class="text-gray-600 mt-1">Email Service API (Hộp thư), API Đơn vị vận chuyển (GHN/GHTK/VNPost), API Cổng thanh toán (MoMo/VNPay). Bật lỗi ở nút <b>Demo</b> góc dưới trái.</p></div>
-      <div class="rounded-2xl bg-gray-50 p-5"><p class="font-bold">Quan hệ</p><p class="text-gray-600 mt-1">«extend»: Quên mật khẩu, Lọc SP, Thêm giỏ, Xem KM, Yêu thích, Hủy đơn, Xem vận chuyển. «include»: Đặt hàng → Thanh toán; Thanh toán tổng quát hóa COD & MoMo/VNPay.</p></div>
-    </div>
-  </div>`;
 };

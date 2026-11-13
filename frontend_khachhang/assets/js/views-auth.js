@@ -140,13 +140,13 @@ V.doReset = (e, token) => {
   go('#/dang-nhap?msg=reset');
 };
 
-/* ------------------ Hộp thư mô phỏng (hệ thống ngoài DichVuEmail) ------------------ */
+/* ------------------ Hộp thư thông báo Email ------------------ */
 V.mailbox = () => {
   const ms = DB.data.outbox;
   return `<div class="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-    <div class="flex flex-wrap items-center justify-between gap-2">${UI.crumbs([['Trang chủ', '#/'], ['Hộp thư mô phỏng', '']])}<span class="text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 ring-1 ring-amber-200 rounded-full px-2.5 py-1"><i class="fa-solid fa-flask mr-1"></i>Mô phỏng «hệ thống ngoài» Email Service API</span></div>
-    <h1 class="font-display text-3xl font-bold mt-4">Hộp thư (Email Service API)</h1>
-    <p class="text-sm text-gray-500 mt-1">Các email hệ thống đã gửi qua Email Service API – dùng để minh họa luồng Đăng ký (UC01) và Quên mật khẩu (UC03).</p>
+    <div class="flex flex-wrap items-center justify-between gap-2">${UI.crumbs([['Trang chủ', '#/'], ['Hộp thư thông báo', '']])}</div>
+    <h1 class="font-display text-3xl font-bold mt-4">Hộp thư thông báo Email</h1>
+    <p class="text-sm text-gray-500 mt-1">Danh sách email xác nhận tài khoản và khôi phục mật khẩu từ hệ thống Urban Chic®.</p>
     <div class="mt-6 space-y-3">${ms.length ? ms.map((m) => {
       const tk = m.token ? DB.data.resetTokens.find((t) => t.token === m.token) : null;
       const stt = tk ? (tk.used ? 'Đã sử dụng' : new Date(tk.expires) < new Date() ? 'Đã hết hạn' : `Còn hiệu lực đến ${fdt(tk.expires)}`) : '';

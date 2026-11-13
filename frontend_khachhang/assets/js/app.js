@@ -10,7 +10,6 @@ const App = {
     [/^\/quen-mat-khau$/, () => V.forgot()],
     [/^\/dat-lai-mat-khau\/([\w-]+)$/, (m) => V.reset(m)],
     [/^\/hop-thu$/, () => V.mailbox()],
-    [/^\/use-case$/, () => V.usecases()],
     [/^\/tai-khoan$/, () => V.profile(), true],
     [/^\/tai-khoan\/dia-chi$/, () => V.addresses(), true],
     [/^\/tai-khoan\/mat-khau$/, () => V.password(), true],
@@ -100,7 +99,7 @@ const App = {
           <div><p class="font-black tracking-[.2em] text-white text-lg">URBAN CHIC®</p><p class="mt-3 leading-relaxed">Thời trang ứng dụng Streetwear & Minimalist cho người trẻ thành thị. Bán lẻ trực tuyến D2C – từ thương hiệu đến tay bạn.</p>
             <div class="flex gap-3 mt-4 text-white">${['fa-facebook-f', 'fa-instagram', 'fa-tiktok'].map((i) => `<span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center"><i class="fa-brands ${i}"></i></span>`).join('')}</div></div>
           <div><p class="text-white font-bold mb-3">Mua sắm</p><ul class="space-y-2">${SEED.categories.map((c) => `<li><a href="#/san-pham?cat=${encodeURIComponent(c.name)}" class="hover:text-white">${c.name}</a></li>`).join('')}</ul></div>
-          <div><p class="text-white font-bold mb-3">Tài khoản</p><ul class="space-y-2"><li><a href="#/tai-khoan" class="hover:text-white">Hồ sơ cá nhân</a></li><li><a href="#/tai-khoan/don-hang" class="hover:text-white">Đơn hàng của tôi</a></li><li><a href="#/tai-khoan/yeu-thich" class="hover:text-white">Sản phẩm yêu thích</a></li><li><a href="#/gio-hang" class="hover:text-white">Giỏ hàng</a></li><li><a href="../" class="hover:text-white"><i class="fa-solid fa-lock mr-1.5 text-xs"></i>Cổng quản trị nội bộ</a></li></ul></div>
+          <div><p class="text-white font-bold mb-3">Tài khoản</p><ul class="space-y-2"><li><a href="#/tai-khoan" class="hover:text-white">Hồ sơ cá nhân</a></li><li><a href="#/tai-khoan/don-hang" class="hover:text-white">Đơn hàng của tôi</a></li><li><a href="#/tai-khoan/yeu-thich" class="hover:text-white">Sản phẩm yêu thích</a></li><li><a href="#/gio-hang" class="hover:text-white">Giỏ hàng</a></li></ul></div>
           <div><p class="text-white font-bold mb-3">Hỗ trợ</p><ul class="space-y-2"><li><i class="fa-solid fa-phone mr-2"></i>1900 6868</li><li><i class="fa-regular fa-envelope mr-2"></i>cskh@urbanchic.vn</li><li><i class="fa-solid fa-location-dot mr-2"></i>273 An Dương Vương, Q.5, TP.HCM</li></ul>
             <div class="flex flex-wrap gap-2 mt-4 text-[11px] font-bold"><span class="bg-white text-black rounded px-2 py-1">COD</span><span class="bg-[#A50064] text-white rounded px-2 py-1">MoMo</span><span class="bg-white rounded px-2 py-1"><span class="text-[#005BAA]">VN</span><span class="text-[#ED1C24]">PAY</span></span><span class="bg-white/10 text-white rounded px-2 py-1">GHN</span><span class="bg-white/10 text-white rounded px-2 py-1">GHTK</span></div></div>
         </div>
@@ -108,45 +107,11 @@ const App = {
       </div>`;
   },
 
-  /* Bảng điều khiển kịch bản demo – mô phỏng lỗi hệ thống ngoài để chụp luồng phụ */
   renderDemo() {
-    const d = DB.data;
     const root = $('#demo-root');
-    if (d.ui.hideDemo) { root.innerHTML = ''; return; }
-    const open = root.dataset.open === '1';
-    const sw = (k, label, sub) => `<label class="flex items-start gap-3 py-2 cursor-pointer"><input type="checkbox" ${d.sim[k] ? 'checked' : ''} onchange="DB.data.sim['${k}']=this.checked;DB.save();App.renderDemo();UI.toast(this.checked?'Đã BẬT mô phỏng: ${label}':'Đã TẮT mô phỏng: ${label}','info')" class="accent-violet-600 w-4 h-4 mt-0.5"><span><span class="block font-semibold">${label}</span><span class="block text-[11px] text-gray-500">${sub}</span></span></label>`;
-    root.innerHTML = `<div class="no-print fixed bottom-4 left-4 z-[80]">
-      ${open ? `<div class="mb-3 w-80 bg-white rounded-2xl shadow-2xl ring-1 ring-gray-200 p-4 text-sm pop-in">
-        <div class="flex items-center justify-between"><p class="font-bold"><i class="fa-solid fa-flask text-violet-600 mr-1.5"></i>Kịch bản demo (đồ án)</p><button onclick="$('#demo-root').dataset.open='0';App.renderDemo()" class="w-7 h-7 rounded-full hover:bg-gray-100"><i class="fa-solid fa-xmark"></i></button></div>
-        <label class="flex items-center gap-3 py-2 border-b border-gray-100 cursor-pointer"><input type="checkbox" ${d.ui.showUC ? 'checked' : ''} onchange="DB.data.ui.showUC=this.checked;DB.save();App.render()" class="accent-violet-600 w-4 h-4"><span class="font-semibold">Hiện nhãn Use Case trên màn hình</span></label>
-        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mt-3">Mô phỏng lỗi hệ thống ngoài</p>
-        ${sw('emailFail', 'Email Service API lỗi', 'UC01 Đăng ký, UC03 Quên mật khẩu')}
-        ${sw('payInitFail', 'API Cổng thanh toán lỗi khởi tạo', 'UC19 MoMo/VNPay')}
-        ${sw('slowCallback', 'Cổng thanh toán phản hồi chậm', 'UC19 – trang kết quả “đang chờ”')}
-        ${sw('shipFail', 'API Đơn vị vận chuyển không phản hồi', 'UC15 Xem quá trình vận chuyển')}
-        <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mt-3 mb-2">Lối tắt</p>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <button onclick="App.quickLogin('minhquan')" class="border rounded-lg py-2 font-semibold hover:border-black">Đăng nhập demo</button>
-          <button onclick="App.quickLogin('vankiet')" class="border rounded-lg py-2 font-semibold hover:border-black">Điền TK bị khóa</button>
-          <a href="#/hop-thu" class="border rounded-lg py-2 font-semibold text-center hover:border-black">Hộp thư mô phỏng</a>
-          <a href="#/use-case" class="border rounded-lg py-2 font-semibold text-center hover:border-black">Danh mục UC</a>
-          <button onclick="App.resetData()" class="border border-red-200 text-red-600 rounded-lg py-2 font-semibold hover:bg-red-50">Khôi phục dữ liệu</button>
-          <button onclick="DB.data.ui.hideDemo=true;DB.save();App.renderDemo();UI.toast('Đã ẩn nút Demo – nhấn Shift + D để hiện lại','info',4500)" class="border rounded-lg py-2 font-semibold hover:border-black">Ẩn nút Demo</button>
-        </div>
-      </div>` : ''}
-      <button onclick="$('#demo-root').dataset.open='${open ? '0' : '1'}';App.renderDemo()" class="h-11 px-4 rounded-full bg-violet-600 text-white shadow-xl text-sm font-bold flex items-center gap-2 hover:bg-violet-700"><i class="fa-solid fa-flask"></i>Demo${Object.values(d.sim).some(Boolean) ? '<span class="w-2 h-2 rounded-full bg-amber-300"></span>' : ''}</button>
-    </div>`;
+    if (root) root.innerHTML = '';
   },
 
-  quickLogin(user) {
-    $('#demo-root').dataset.open = '0';
-    if (user === 'vankiet' || !location.hash.startsWith('#/dang-nhap')) { if (Session.user()) XacThucController.dangXuat(); go('#/dang-nhap'); }
-    setTimeout(() => { const a = $('#login-account'); const p = $('#login-password'); if (a && p) { a.value = user; p.value = 'Demo@123'; UI.toast('Đã điền tài khoản demo – nhấn Đăng nhập', 'info'); } }, 50);
-  },
-  async resetData() {
-    if (!(await UI.confirm({ title: 'Khôi phục dữ liệu mẫu', message: 'Xóa mọi thay đổi (tài khoản mới, đơn hàng, giỏ hàng...) và đưa về dữ liệu mẫu ban đầu?', okLabel: 'Khôi phục', danger: true }))) return;
-    DB.reset(); Object.assign(PD, { id: null }); CK.uid = null; UI.toast('Đã khôi phục dữ liệu mẫu.'); go('#/');
-  },
   logout() { XacThucController.dangXuat(); UI.toast('Bạn đã đăng xuất.', 'info'); go('#/'); App.renderHeader(); },
 
   search(e) { e.preventDefault(); const q = $('#hdr-search').value.trim(); go('#/san-pham' + qsStr({ q })); },
@@ -184,5 +149,4 @@ DB.load();
 Catalog.init();
 App.renderFooter();
 window.addEventListener('hashchange', () => { UI.closeModal(); App.render(); });
-window.addEventListener('keydown', (e) => { if (e.shiftKey && (e.key === 'D' || e.key === 'd') && !/input|textarea|select/i.test(e.target.tagName)) { DB.data.ui.hideDemo = !DB.data.ui.hideDemo; DB.save(); App.renderDemo(); } });
 App.render();

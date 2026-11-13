@@ -79,10 +79,8 @@ const UI = {
     });
   },
 
-  /* Nhãn Use Case – giúp chụp hình báo cáo (bật/tắt ở bảng Demo) */
-  uc(code, boundary) {
-    if (!DB.data.ui.showUC) return '';
-    return `<span class="uc-tag inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider bg-violet-50 text-violet-700 ring-1 ring-violet-200 rounded-full px-2.5 py-1"><i class="fa-solid fa-diagram-project"></i>${code}${boundary ? ` · ${boundary}` : ''}</span>`;
+  uc() {
+    return '';
   },
 
   badgeOrder(st) { const s = ORDER_STATUS[st] || { label: st, cls: 'bg-gray-100', icon: 'fa-circle' }; return `<span class="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 ring-1 ${s.cls}"><i class="fa-solid ${s.icon} text-[10px]"></i>${s.label}</span>`; },
