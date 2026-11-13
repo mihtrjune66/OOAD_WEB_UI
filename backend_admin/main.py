@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -227,6 +227,13 @@ class StoreCustomerRegister(BaseModel):
     password: Optional[str] = "Demo@123"
     phone: Optional[str] = ""
     name: Optional[str] = ""
+    address: Optional[str] = ""
+
+class StoreCustomerUpdate(BaseModel):
+    customer_id: str
+    name: Optional[str] = ""
+    email: Optional[str] = ""
+    phone: Optional[str] = ""
     address: Optional[str] = ""
 
 
@@ -1260,12 +1267,17 @@ def get_products(db: sqlite3.Connection = Depends(get_db)):
 @app.get("/api/store/sync")
 def store_sync(customer_id: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
-    query = "SELECT * FROM DON_HANG WHERE 1=1"
+    query = """
+        SELECT d.*, k.CodeVoucher
+        FROM DON_HANG d
+        LEFT JOIN KHUYEN_MAI k ON (d.MaKhuyenMai = k.MaKhuyenMai OR d.MaKhuyenMai = k.CodeVoucher)
+        WHERE 1=1
+    """
     params = []
     if customer_id:
-        query += " AND MaKhachHang = ?"
+        query += " AND d.MaKhachHang = ?"
         params.append(customer_id)
-    query += " ORDER BY NgayDat DESC"
+    query += " ORDER BY d.NgayDat DESC"
     cursor.execute(query, params)
     orders = [row_to_dict(r) for r in cursor.fetchall()]
     for o in orders:
@@ -1278,19 +1290,34 @@ def store_sync(customer_id: Optional[str] = None, db: sqlite3.Connection = Depen
     cursor.execute("SELECT MaSKU, SoLuongKhaDung FROM TON_KHO_VI_TRI WHERE MaSKU IS NOT NULL")
     stock = {r["MaSKU"]: r["SoLuongKhaDung"] for r in cursor.fetchall()}
 
-    cursor.execute("SELECT * FROM KHUYEN_MAI WHERE TrangThaiKM = 'DANG_HOAT_DONG'")
+    cursor.execute("""
+        SELECT b.*, sp.TenSanPham, sp.DanhMuc
+        FROM BIEN_THE_SKU b
+        LEFT JOIN SAN_PHAM sp ON b.MaSanPham = sp.MaSanPham
+    """)
+    skus = [row_to_dict(r) for r in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM KHUYEN_MAI")
     vouchers = [row_to_dict(r) for r in cursor.fetchall()]
 
-    cursor.execute("SELECT MaKhachHang, TrangThaiKH FROM KHACH_HANG")
-    customers = {r["MaKhachHang"]: r["TrangThaiKH"] for r in cursor.fetchall()}
+    cursor.execute("SELECT * FROM KHACH_HANG")
+    customers_list = [row_to_dict(r) for r in cursor.fetchall()]
+    customers = {r["MaKhachHang"]: r["TrangThaiKH"] for r in customers_list}
+
+    cursor.execute("SELECT * FROM CHINH_SACH_HE_THONG LIMIT 1")
+    policy_row = cursor.fetchone()
+    policy = row_to_dict(policy_row) if policy_row else None
 
     return {
         "success": True,
         "orders": orders,
         "returns": returns,
         "stock": stock,
+        "skus": skus,
         "vouchers": vouchers,
-        "customers": customers
+        "customers": customers,
+        "customers_list": customers_list,
+        "policy": policy
     }
 
 @app.post("/api/store/order")
@@ -1310,31 +1337,65 @@ def store_create_order(req: StoreOrderCreate, db: sqlite3.Connection = Depends(g
             INSERT OR IGNORE INTO KHACH_HANG (MaKhachHang, HoTen, SoDienThoai, DiaChiMacDinh, TrangThaiKH)
             VALUES (?, ?, ?, ?, 'HOAT_DONG')
         """, (req.customer_id, req.customer_name, req.phone, req.address))
+    else:
+        cursor.execute("""
+            UPDATE KHACH_HANG
+            SET HoTen = COALESCE(NULLIF(?, ''), HoTen),
+                SoDienThoai = COALESCE(NULLIF(?, ''), SoDienThoai),
+                DiaChiMacDinh = COALESCE(NULLIF(?, ''), DiaChiMacDinh)
+            WHERE MaKhachHang = ?
+        """, (req.customer_name, req.phone, req.address, req.customer_id))
 
     # Kiểm tra đơn đã tồn tại chưa
     cursor.execute("SELECT MaDonHang FROM DON_HANG WHERE MaDonHang = ?", (req.order_id,))
     if cursor.fetchone():
         return {"success": True, "message": "Đơn hàng đã tồn tại", "order_id": req.order_id}
 
+    # Ánh xạ voucher_code -> MaKhuyenMai
+    ma_km = None
+    if req.voucher_code:
+        cursor.execute("SELECT MaKhuyenMai FROM KHUYEN_MAI WHERE UPPER(CodeVoucher) = UPPER(?) OR UPPER(MaKhuyenMai) = UPPER(?)", (req.voucher_code, req.voucher_code))
+        km_row = cursor.fetchone()
+        ma_km = km_row["MaKhuyenMai"] if km_row else req.voucher_code
+
     now_str = datetime.now().strftime("%d/%m %H:%M")
     initial_log = f"{now_str}: Khách hàng đặt đơn hàng trực tuyến - Chờ nhân viên vận hành duyệt"
+
+    pay_method = req.pay_method or "CHO_CHON_PT"
+    pay_status = req.pay_status or "CHO_CHON_PT"
 
     cursor.execute("""
         INSERT INTO DON_HANG (
             MaDonHang, MaKhachHang, TenKhachHang, SoDienThoai, DiaChiGiao, MaKhuyenMai,
             TongTienHang, PhiVanChuyen, TienGiamGia, TongThanhToan, PhuongThucTT, TrangThaiTT,
-            TrangThaiDon, DonViVanChuyen, LichSuHanhTrinh
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CHO_DUYET', 'Giao Hàng Nhanh (GHN)', ?)
+            TrangThaiDon, DonViVanChuyen, GhiChuVanDon, LichSuHanhTrinh
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CHO_DUYET', 'Giao Hàng Nhanh (GHN)', ?, ?)
     """, (
-        req.order_id, req.customer_id, req.customer_name, req.phone, req.address, req.voucher_code,
-        req.subtotal, req.ship_fee, req.discount, req.total, req.pay_method, req.pay_status,
-        initial_log
+        req.order_id, req.customer_id, req.customer_name, req.phone, req.address, ma_km,
+        req.subtotal, req.ship_fee, req.discount, req.total, pay_method, pay_status,
+        req.note or None, initial_log
     ))
 
     for it in req.items:
         item_name = it.name or it.sku
+        # Đảm bảo mã SKU có trong BIEN_THE_SKU và TON_KHO_VI_TRI để không bị lỗi FK hoặc thiếu thông tin khi Vận hành duyệt đơn
+        cursor.execute("SELECT MaSKU FROM BIEN_THE_SKU WHERE MaSKU = ?", (it.sku,))
+        if not cursor.fetchone():
+            parts = it.sku.split("-")
+            sz = parts[-1] if len(parts) >= 4 else "M"
+            clr = parts[-2] if len(parts) >= 4 else "Mặc định"
+            cursor.execute("INSERT OR IGNORE INTO SAN_PHAM (MaSanPham, TenSanPham, DanhMuc, ThuongHieu, GiaNiemYet, TrangThaiSP) VALUES ('SP001', 'Sản phẩm Urban Chic', 'Thời trang', 'Urban Chic', ?, 'DANG_BAN')", (it.price,))
+            cursor.execute("""
+                INSERT OR IGNORE INTO BIEN_THE_SKU (MaSKU, MaSanPham, KichCo, MauSac, GiaVon, GiaBanSKU, NguongTonToiThieu, TrangThaiSKU)
+                VALUES (?, 'SP001', ?, ?, ?, ?, 5, 'DANG_BAN')
+            """, (it.sku, sz, clr, round(it.price * 0.6), it.price))
+            cursor.execute("""
+                INSERT OR IGNORE INTO TON_KHO_VI_TRI (MaViTriKho, MaSKU, KhuVuc, Tang, KeHang, KhuVucKe, SoLuongThucTe, SoLuongTamGiu, SoLuongKhaDung)
+                VALUES (?, ?, 'Khu A', 'Tầng 1', 'Kệ A1', 'Khu A - Tầng 1 - Kệ A1', 25, 0, 25)
+            """, (f"KE-{it.sku[-6:]}", it.sku))
+
         cursor.execute("""
-            INSERT INTO CHI_TIET_DON_HANG (MaDonHang, MaSKU, TenSanPham, SoLuongMua, DonGiaBan, ThanhTien)
+            INSERT OR REPLACE INTO CHI_TIET_DON_HANG (MaDonHang, MaSKU, TenSanPham, SoLuongMua, DonGiaBan, ThanhTien)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (req.order_id, it.sku, item_name, it.qty, it.price, it.qty * it.price))
 
@@ -1346,7 +1407,7 @@ def store_create_order(req: StoreOrderCreate, db: sqlite3.Connection = Depends(g
         """, (it.qty, it.qty, it.sku))
 
     if req.voucher_code:
-        cursor.execute("UPDATE KHUYEN_MAI SET SoLuotDaDung = SoLuotDaDung + 1 WHERE CodeVoucher = ?", (req.voucher_code,))
+        cursor.execute("UPDATE KHUYEN_MAI SET SoLuotDaDung = SoLuotDaDung + 1 WHERE UPPER(CodeVoucher) = UPPER(?) OR UPPER(MaKhuyenMai) = UPPER(?)", (req.voucher_code, req.voucher_code))
 
     db.commit()
     return {"success": True, "message": f"Đơn hàng #{req.order_id} đã được lưu vào hệ thống CSDL SQLite nội bộ!", "order_id": req.order_id}
@@ -1358,8 +1419,8 @@ def store_cancel_order(order_id: str, req: StoreCancelOrder, db: sqlite3.Connect
     order = cursor.fetchone()
     if not order:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng!")
-    if order["TrangThaiDon"] != "CHO_DUYET":
-        raise HTTPException(status_code=400, detail="Đơn hàng đã được duyệt hoặc đang giao, không thể hủy trực tiếp!")
+    if order["TrangThaiDon"] not in ["CHO_DUYET", "DANG_DONG_GOI"]:
+        raise HTTPException(status_code=400, detail="Đơn hàng đã bàn giao vận chuyển hoặc hoàn tất, không thể hủy trực tiếp!")
 
     cursor.execute("SELECT MaSKU, SoLuongMua FROM CHI_TIET_DON_HANG WHERE MaDonHang = ?", (order_id,))
     for item in cursor.fetchall():
@@ -1375,7 +1436,7 @@ def store_cancel_order(order_id: str, req: StoreCancelOrder, db: sqlite3.Connect
     new_log = f"{old_log} | {now_str}: Khách hủy đơn trên Web (Lý do: {req.reason}) - Đã giải phóng tồn kho".strip(" |")
 
     trang_thai_tt = order["TrangThaiTT"]
-    if trang_thai_tt == "DA_THANH_TOAN":
+    if trang_thai_tt == "DA_THANH_TOAN" and order["PhuongThucTT"].upper() != "COD":
         trang_thai_tt = "CHO_HOAN_TIEN"
 
     cursor.execute("""
@@ -1414,12 +1475,15 @@ def store_create_return(req: StoreReturnCreate, db: sqlite3.Connection = Depends
     if cursor.fetchone():
         return {"success": True, "message": "Yêu cầu đổi trả đã tồn tại", "return_id": req.return_id}
 
+    ly_do_day_du = f"{req.reason} - {req.detail}".strip(" -") if req.detail else req.reason
+    img_url = req.image_url or "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400"
+
     cursor.execute("""
         INSERT INTO YEU_CAU_DOI_TRA (
             MaYeuCau, MaDonHang, KhachHang, LyDoDoiTra, HinhAnhMinhChung, PhuongAnXuLy, TrangThaiYC
         ) VALUES (?, ?, ?, ?, ?, ?, 'CHO_TIEP_NHAN')
     """, (
-        req.return_id, req.order_id, req.customer_name, req.reason, req.image_url, req.option
+        req.return_id, req.order_id, req.customer_name, ly_do_day_du, img_url, req.option
     ))
     db.commit()
     return {"success": True, "message": f"Đã lưu yêu cầu đổi trả #{req.return_id} và gửi tới Phân hệ Vận hành!"}
@@ -1439,9 +1503,30 @@ def store_register_customer(req: StoreCustomerRegister, db: sqlite3.Connection =
     cursor.execute("""
         INSERT OR IGNORE INTO KHACH_HANG (MaKhachHang, HoTen, SoDienThoai, Email, DiaChiMacDinh, TrangThaiKH)
         VALUES (?, ?, ?, ?, ?, 'HOAT_DONG')
-    """, (ma_kh, req.name or req.username, req.phone, req.email, req.address))
+    """, (ma_kh, req.name or req.username, req.phone or "Chưa cập nhật", req.email, req.address))
     db.commit()
     return {"success": True, "customer_id": ma_kh, "message": "Đã lưu tài khoản khách hàng vào CSDL!"}
+
+@app.post("/api/store/customer/update")
+def store_update_customer(req: StoreCustomerUpdate, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT MaKhachHang FROM KHACH_HANG WHERE MaKhachHang = ?", (req.customer_id,))
+    if not cursor.fetchone():
+        cursor.execute("""
+            INSERT OR IGNORE INTO KHACH_HANG (MaKhachHang, HoTen, SoDienThoai, Email, DiaChiMacDinh, TrangThaiKH)
+            VALUES (?, ?, ?, ?, ?, 'HOAT_DONG')
+        """, (req.customer_id, req.name or req.customer_id, req.phone or "", req.email or "", req.address or ""))
+    else:
+        cursor.execute("""
+            UPDATE KHACH_HANG
+            SET HoTen = COALESCE(NULLIF(?, ''), HoTen),
+                Email = COALESCE(NULLIF(?, ''), Email),
+                SoDienThoai = COALESCE(NULLIF(?, ''), SoDienThoai),
+                DiaChiMacDinh = COALESCE(NULLIF(?, ''), DiaChiMacDinh)
+            WHERE MaKhachHang = ?
+        """, (req.name, req.email, req.phone, req.address, req.customer_id))
+    db.commit()
+    return {"success": True, "message": "Đã đồng bộ thông tin hồ sơ khách hàng vào CSDL!"}
 
 
 # Phục vụ giao diện tĩnh
@@ -1449,13 +1534,25 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Phân hệ 1 – Web Storefront cho Khách hàng (frontend_khachhang/), truy cập tại /khach-hang/
+# Phân hệ 1 – Web Storefront cho Khách hàng (frontend_khachhang/), truy cập tại /khach-hang/ hoặc trực tiếp trên domain store
 KHACH_HANG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend_khachhang")
 if os.path.isdir(KHACH_HANG_DIR):
     app.mount("/khach-hang", StaticFiles(directory=KHACH_HANG_DIR, html=True), name="khach_hang")
+    assets_dir = os.path.join(KHACH_HANG_DIR, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="khach_hang_assets")
+
+@app.get("/admin")
+@app.get("/admin/")
+def serve_admin_explicit():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 @app.get("/")
-def serve_home():
+def serve_home(request: Request):
+    host = (request.headers.get("host") or "").lower()
+    # Nếu truy cập qua domain store (ví dụ urban-chic-store.onrender.com) thì mở thẳng Website Khách hàng ở trang gốc /
+    if ("store" in host or "shop" in host or "khachhang" in host) and os.path.isdir(KHACH_HANG_DIR):
+        return FileResponse(os.path.join(KHACH_HANG_DIR, "index.html"))
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 @app.get("/{filename}.js")

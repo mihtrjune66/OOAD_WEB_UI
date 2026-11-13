@@ -60,37 +60,130 @@ const DB = {
 };
 
 /* ----------------- KẾT NỐI ĐỒNG BỘ CSDL SQLITE (FASTAPI BACKEND) ----------------- */
+const storeSyncChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('urban_chic_sync_channel') : null;
+
 const StoreAPI = {
+  _resolvedBaseUrl: null,
+  _resolvingPromise: null,
+  _writeQueue: Promise.resolve(),
+
+  notifyPeers() {
+    try {
+      if (storeSyncChannel) {
+        storeSyncChannel.postMessage({ type: 'STORE_EVENT', t: Date.now() });
+      }
+    } catch (e) { /* bỏ qua */ }
+  },
+
   getBaseUrl() {
-    if (window.API_BASE_URL) return window.API_BASE_URL;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('api')) {
+      const apiParam = urlParams.get('api').replace(/\/+$/, '');
+      localStorage.setItem('urban_chic_api_url', apiParam);
+      return apiParam;
+    }
+    if (window.API_BASE_URL !== undefined) return window.API_BASE_URL;
+    if (this._resolvedBaseUrl !== null) return this._resolvedBaseUrl;
     const h = window.location.hostname;
     const p = window.location.port;
     if (h === '127.0.0.1' || h === 'localhost') {
       if (p === '8000') return '';
       return 'http://127.0.0.1:8000';
     }
-    // Khi triển khai trên Render:
-    // Website khách hàng: urban-chic-store.onrender.com -> Backend API: urban-chic-admin.onrender.com
-    if (h.includes('urban-chic-store')) {
-      return `https://${h.replace('urban-chic-store', 'urban-chic-admin')}`;
-    }
     if (window.location.pathname.startsWith('/khach-hang')) {
       return '';
     }
     const saved = localStorage.getItem('urban_chic_api_url');
-    if (saved) return saved;
-    return `https://${h.replace('store', 'admin')}`;
+    if (saved !== null) return saved;
+    // Mặc định thử gọi ngay cùng domain hiện tại (vì FastAPI có thể chạy ngay trên domain này)
+    return '';
+  },
+
+  async resolveBackendUrl() {
+    if (this._resolvedBaseUrl !== null) return this._resolvedBaseUrl;
+    if (this._resolvingPromise) return this._resolvingPromise;
+
+    this._resolvingPromise = (async () => {
+      const h = window.location.hostname;
+      const p = window.location.port;
+      if (h === '127.0.0.1' || h === 'localhost') {
+        this._resolvedBaseUrl = p === '8000' ? '' : 'http://127.0.0.1:8000';
+        return this._resolvedBaseUrl;
+      }
+
+      const candidates = [''];
+      const saved = localStorage.getItem('urban_chic_api_url');
+      if (saved && !candidates.includes(saved)) candidates.push(saved);
+      if (h.includes('urban-chic-store')) {
+        candidates.push(`https://${h.replace('urban-chic-store', 'urban-chic-admin')}`);
+      }
+      if (h.includes('store')) {
+        candidates.push(`https://${h.replace('store', 'admin')}`);
+      }
+      candidates.push('https://urban-chic-store.onrender.com');
+      candidates.push('https://urban-chic-admin.onrender.com');
+      candidates.push('https://ooad-web-ui.onrender.com');
+
+      for (const base of candidates) {
+        try {
+          const ctrl = new AbortController();
+          const tid = setTimeout(() => ctrl.abort(), 3500);
+          const res = await fetch(`${base}/api/store/sync`, { method: 'GET', signal: ctrl.signal });
+          clearTimeout(tid);
+          if (res.ok) {
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+              this._resolvedBaseUrl = base;
+              localStorage.setItem('urban_chic_api_url', base);
+              return base;
+            }
+          }
+        } catch (e) { /* thử ứng viên tiếp theo */ }
+      }
+      this._resolvedBaseUrl = '';
+      return '';
+    })();
+
+    return this._resolvingPromise;
+  },
+
+  _enqueue(fn) {
+    this._writeQueue = this._writeQueue.then(async () => {
+      await fn();
+      this.notifyPeers();
+    }).catch((err) => {
+      console.warn('StoreAPI queue error:', err.message);
+    });
+    return this._writeQueue;
   },
 
   async syncWithBackend() {
     try {
-      const base = this.getBaseUrl();
+      await this._writeQueue;
+      const base = await this.resolveBackendUrl();
       const res = await fetch(`${base}/api/store/sync`, { method: 'GET' });
       if (!res.ok) return;
       const data = await res.json();
       if (!data.success) return;
 
       let changed = false;
+
+      // 0. Đồng bộ Chính sách hệ thống (CHINH_SACH_HE_THONG) từ Admin
+      if (data.policy) {
+        const pol = data.policy;
+        if (pol.SoNgayDoiTraToiDa && SEED.policy.soNgayDoiTra !== pol.SoNgayDoiTraToiDa) {
+          SEED.policy.soNgayDoiTra = pol.SoNgayDoiTraToiDa;
+          changed = true;
+        }
+        if (pol.PhiShipMacDinh != null && SEED.policy.phiShipNoiThanh !== pol.PhiShipMacDinh) {
+          SEED.policy.phiShipNoiThanh = pol.PhiShipMacDinh;
+          changed = true;
+        }
+        if (pol.MocFreeship != null && SEED.policy.mocFreeship !== pol.MocFreeship) {
+          SEED.policy.mocFreeship = pol.MocFreeship;
+          changed = true;
+        }
+      }
 
       // 1. Đồng bộ số lượng tồn khả dụng thực tế từ kho SQLite
       if (data.stock && Object.keys(data.stock).length) {
@@ -102,19 +195,109 @@ const StoreAPI = {
         });
       }
 
-      // 2. Đồng bộ trạng thái đơn hàng (Được nhân viên duyệt, đóng gói, giao...)
+      // 1b. Đồng bộ thông tin SKU & Giá bán từ Phân hệ Thủ kho (BIEN_THE_SKU)
+      if (data.skus && data.skus.length && typeof Catalog !== 'undefined') {
+        data.skus.forEach((bs) => {
+          if (bs.TrangThaiSKU === 'TAM_AN') {
+            if (DB.data.stock[bs.MaSKU] !== 0) {
+              DB.data.stock[bs.MaSKU] = 0;
+              changed = true;
+            }
+          }
+          const existingInfo = Catalog.skuIndex[bs.MaSKU];
+          if (existingInfo && existingInfo.p && bs.GiaBanSKU > 0) {
+            if (existingInfo.p.id === bs.MaSanPham && existingInfo.p.price !== bs.GiaBanSKU) {
+              existingInfo.p.price = bs.GiaBanSKU;
+              changed = true;
+            }
+          } else if (!existingInfo) {
+            const p = Catalog.get(bs.MaSanPham) || SEED.products[0];
+            Catalog.skuIndex[bs.MaSKU] = {
+              p: { ...p, id: bs.MaSanPham || p.id, name: bs.TenSanPham || p.name, price: bs.GiaBanSKU || p.price },
+              color: { name: bs.MauSac || 'Tiêu chuẩn', code: (bs.MauSac || 'STD').slice(0, 3).toUpperCase(), hex: '#111827' },
+              size: bs.KichCo || 'M',
+            };
+          }
+        });
+      }
+
+      // 1c. Đồng bộ chương trình khuyến mãi (Voucher) từ Phân hệ Admin
+      if (data.vouchers && data.vouchers.length) {
+        data.vouchers.forEach((bv) => {
+          let lv = DB.data.vouchers.find((v) => v.code === bv.CodeVoucher || v.id === bv.MaKhuyenMai);
+          const title = bv.LoaiGiam === 'PHAN_TRAM'
+            ? `Giảm ${bv.GiaTriGiam}% cho đơn từ ${Number(bv.DonToiThieu || 0).toLocaleString('vi-VN')}₫`
+            : `Giảm ${Number(bv.GiaTriGiam || 0).toLocaleString('vi-VN')}₫ cho đơn từ ${Number(bv.DonToiThieu || 0).toLocaleString('vi-VN')}₫`;
+          if (!lv) {
+            DB.data.vouchers.unshift({
+              id: bv.MaKhuyenMai,
+              code: bv.CodeVoucher,
+              type: bv.LoaiGiam,
+              value: bv.GiaTriGiam,
+              max: bv.LoaiGiam === 'PHAN_TRAM' ? 100000 : null,
+              min: bv.DonToiThieu || 0,
+              limit: bv.SoLuotToiDa || 100,
+              used: bv.SoLuotDaDung || 0,
+              start: bv.NgayBatDau || '2026-01-01',
+              end: bv.NgayKetThuc || '2027-12-31',
+              status: bv.TrangThaiKM || 'DANG_HOAT_DONG',
+              cats: null,
+              title,
+            });
+            changed = true;
+          } else {
+            if (
+              lv.status !== bv.TrangThaiKM ||
+              lv.value !== bv.GiaTriGiam ||
+              lv.min !== bv.DonToiThieu ||
+              lv.limit !== bv.SoLuotToiDa ||
+              lv.used !== bv.SoLuotDaDung ||
+              lv.end !== bv.NgayKetThuc
+            ) {
+              lv.status = bv.TrangThaiKM;
+              lv.type = bv.LoaiGiam;
+              lv.value = bv.GiaTriGiam;
+              lv.min = bv.DonToiThieu;
+              lv.limit = bv.SoLuotToiDa;
+              lv.used = bv.SoLuotDaDung;
+              lv.start = bv.NgayBatDau;
+              lv.end = bv.NgayKetThuc;
+              lv.title = title;
+              changed = true;
+            }
+          }
+        });
+      }
+
+      // 2. Đồng bộ trạng thái đơn hàng (Được nhân viên vận hành duyệt, đóng gói, giao, hủy...)
       if (data.orders && data.orders.length) {
         data.orders.forEach((bo) => {
           let lo = DB.data.orders.find((o) => o.id === bo.MaDonHang);
+          const normPayMethod = !bo.PhuongThucTT || bo.PhuongThucTT === 'CHO_CHON_PT'
+            ? null
+            : bo.PhuongThucTT.toUpperCase();
+          const normPayStatus = bo.TrangThaiTT || 'CHUA_THANH_TOAN';
+          const normStatus = bo.TrangThaiDon === 'DOI_TRA' ? 'DA_GIAO' : bo.TrangThaiDon;
+          const histArr = (bo.LichSuHanhTrinh || '')
+            .split(' | ')
+            .filter(Boolean)
+            .map((s) => ({ t: (bo.NgayDat || nowISO()).replace(' ', 'T'), s }));
+          const trkEvents = histArr.map((h) => ({
+            t: h.t,
+            loc: bo.DonViVanChuyen || 'Kho Trung Tâm Urban Chic – TP.HCM',
+            s: h.s,
+          }));
+
           if (!lo) {
             lo = {
               id: bo.MaDonHang,
               customerId: bo.MaKhachHang,
-              date: bo.NgayDat,
+              date: (bo.NgayDat || nowISO()).replace(' ', 'T'),
               items: (bo.items || []).map((it) => ({
                 sku: it.MaSKU,
                 qty: it.SoLuongMua,
                 price: it.DonGiaBan,
+                name: it.TenSanPham,
               })),
               receiver: {
                 name: bo.TenKhachHang,
@@ -124,26 +307,46 @@ const StoreAPI = {
               subtotal: bo.TongTienHang,
               shipFee: bo.PhiVanChuyen,
               discount: bo.TienGiamGia,
-              voucher: bo.MaKhuyenMai,
+              voucher: bo.CodeVoucher || bo.MaKhuyenMai || null,
               total: bo.TongThanhToan,
-              payMethod: bo.PhuongThucTT,
-              payStatus: bo.TrangThaiTT,
-              status: bo.TrangThaiDon,
+              payMethod: normPayMethod,
+              payStatus: normPayStatus,
+              status: normStatus,
+              cancelReason: bo.LyDoHuy || null,
+              deliveredAt: normStatus === 'DA_GIAO' ? (bo.NgayDat || nowISO()).replace(' ', 'T') : null,
+              invoice: normStatus === 'DA_GIAO' ? { no: 'HD-' + bo.MaDonHang.slice(-7), date: (bo.NgayDat || nowISO()).replace(' ', 'T') } : null,
               trackingCode: bo.MaVanDon,
               carrier: bo.DonViVanChuyen || 'Giao Hàng Nhanh (GHN)',
-              history: (bo.LichSuHanhTrinh || '').split(' | ').map((s) => ({ t: bo.NgayDat, s })),
-              tracking: [],
+              history: histArr.length ? histArr : [{ t: nowISO(), s: 'Đặt hàng thành công' }],
+              tracking: trkEvents,
             };
             DB.data.orders.unshift(lo);
             changed = true;
           } else {
-            if (lo.status !== bo.TrangThaiDon || lo.payStatus !== bo.TrangThaiTT || lo.trackingCode !== bo.MaVanDon) {
-              lo.status = bo.TrangThaiDon;
-              lo.payStatus = bo.TrangThaiTT;
+            // Không ghi đè trạng thái chờ chọn phương thức thanh toán khi khách đang ở bước thanh toán
+            const keepLocalCheckoutState = (lo.payStatus === 'CHO_CHON_PT' || lo.payStatus === 'CHO_THANH_TOAN') && (!bo.TrangThaiTT || bo.TrangThaiTT === 'CHO_CHON_PT');
+            const newPayStatus = keepLocalCheckoutState ? lo.payStatus : normPayStatus;
+            const newPayMethod = keepLocalCheckoutState ? lo.payMethod : (normPayMethod || lo.payMethod);
+
+            if (
+              lo.status !== normStatus ||
+              lo.payStatus !== newPayStatus ||
+              lo.trackingCode !== bo.MaVanDon ||
+              (histArr.length && lo.history.length !== histArr.length)
+            ) {
+              lo.status = normStatus;
+              lo.payStatus = newPayStatus;
+              lo.payMethod = newPayMethod;
+              if (bo.LyDoHuy) lo.cancelReason = bo.LyDoHuy;
               if (bo.MaVanDon) lo.trackingCode = bo.MaVanDon;
               if (bo.DonViVanChuyen) lo.carrier = bo.DonViVanChuyen;
-              if (bo.LichSuHanhTrinh) {
-                lo.history = bo.LichSuHanhTrinh.split(' | ').map((s) => ({ t: bo.NgayDat, s }));
+              if (normStatus === 'DA_GIAO' && !lo.deliveredAt) {
+                lo.deliveredAt = nowISO();
+                lo.invoice = lo.invoice || { no: 'HD-' + bo.MaDonHang.slice(-7), date: nowISO() };
+              }
+              if (histArr.length) {
+                lo.history = histArr;
+                lo.tracking = trkEvents;
               }
               changed = true;
             }
@@ -159,7 +362,7 @@ const StoreAPI = {
             lr = {
               id: br.MaYeuCau,
               orderId: br.MaDonHang,
-              t: br.NgayGuiYeuCau,
+              t: (br.NgayGuiYeuCau || nowISO()).replace(' ', 'T'),
               items: [],
               reason: br.LyDoDoiTra,
               detail: br.GhiChuXuLy || '',
@@ -169,90 +372,110 @@ const StoreAPI = {
             };
             DB.data.returns.push(lr);
             changed = true;
-          } else if (lr.status !== br.TrangThaiYC) {
+          } else if (lr.status !== br.TrangThaiYC || (br.PhuongAnXuLy && lr.option !== br.PhuongAnXuLy)) {
             lr.status = br.TrangThaiYC;
             if (br.PhuongAnXuLy) lr.option = br.PhuongAnXuLy;
+            if (br.GhiChuXuLy) lr.detail = br.GhiChuXuLy;
             changed = true;
           }
         });
       }
 
-      // 4. Đồng bộ Blacklist từ SQLite
+      // 4. Đồng bộ Blacklist / Mở khóa tài khoản từ SQLite (BLACKLIST <-> KHOA)
       if (data.customers && Object.keys(data.customers).length) {
         DB.data.customers.forEach((c) => {
-          if (data.customers[c.id] && c.status !== data.customers[c.id]) {
-            c.status = data.customers[c.id];
-            changed = true;
+          const dbSt = data.customers[c.id];
+          if (dbSt) {
+            const mapped = dbSt === 'BLACKLIST' || dbSt === 'KHOA' ? 'KHOA' : 'HOAT_DONG';
+            if (c.status !== mapped) {
+              c.status = mapped;
+              changed = true;
+            }
           }
         });
+      }
+
+      // 5. Đồng bộ ngược đơn hàng vừa tạo ở local nếu chưa có trên SQLite
+      if (data.orders) {
+        const backendOrderIds = new Set(data.orders.map((bo) => bo.MaDonHang));
+        const missingLocalOrders = DB.data.orders.filter(
+          (lo) => !backendOrderIds.has(lo.id) && Number(lo.id.replace(/\D/g, '')) >= 20261121
+        );
+        for (const mo of missingLocalOrders) {
+          await this._sendOrderToBackend(mo);
+        }
       }
 
       if (changed) {
         DB.save();
         if (window.App && typeof App.render === 'function') {
-          App.render();
+          const activeEl = document.activeElement;
+          const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+          const modalOpen = document.getElementById('modal-root') && document.getElementById('modal-root').innerHTML.trim() !== '';
+          if (!isTyping && !modalOpen) {
+            App.render();
+          }
         }
       }
     } catch (err) {
-      // Bỏ qua lỗi mạng âm thầm để không gián đoạn trải nghiệm người dùng
       console.warn('StoreAPI syncWithBackend skipped:', err.message);
     }
   },
 
-  async createOrder(o) {
-    try {
-      const base = this.getBaseUrl();
-      const payload = {
-        order_id: o.id,
-        customer_id: o.customerId,
-        customer_name: o.receiver.name,
-        phone: o.receiver.phone,
-        address: o.receiver.address,
-        items: o.items.map((it) => {
-          const info = typeof Catalog !== 'undefined' ? Catalog.info(it.sku) : null;
-          return {
-            sku: it.sku,
-            name: info?.p?.name ? `${info.p.name} (${info.color.name}/${info.size})` : it.sku,
-            qty: it.qty,
-            price: it.price,
-          };
-        }),
-        subtotal: o.subtotal,
-        ship_fee: o.shipFee || 0,
-        discount: o.discount || 0,
-        voucher_code: o.voucher || null,
-        total: o.total,
-        pay_method: o.payMethod || 'COD',
-        pay_status: o.payStatus || 'CHUA_THANH_TOAN',
-        note: o.note || '',
-      };
-      await fetch(`${base}/api/store/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      console.warn('StoreAPI createOrder fallback:', err.message);
-    }
+  async _sendOrderToBackend(o) {
+    const base = await this.resolveBackendUrl();
+    const payload = {
+      order_id: o.id,
+      customer_id: o.customerId,
+      customer_name: o.receiver.name,
+      phone: o.receiver.phone,
+      address: o.receiver.address,
+      items: o.items.map((it) => {
+        const info = typeof Catalog !== 'undefined' ? Catalog.info(it.sku) : null;
+        return {
+          sku: it.sku,
+          name: info?.p?.name ? `${info.p.name} (${info.color.name}/${info.size})` : (it.name || it.sku),
+          qty: it.qty,
+          price: it.price,
+        };
+      }),
+      subtotal: o.subtotal,
+      ship_fee: o.shipFee || 0,
+      discount: o.discount || 0,
+      voucher_code: o.voucher || null,
+      total: o.total,
+      pay_method: o.payMethod || 'CHO_CHON_PT',
+      pay_status: o.payStatus || 'CHO_CHON_PT',
+      note: o.note || '',
+    };
+    await fetch(`${base}/api/store/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
   },
 
-  async cancelOrder(orderId, reason) {
-    try {
-      const base = this.getBaseUrl();
+  createOrder(o) {
+    return this._enqueue(async () => {
+      await this._sendOrderToBackend(o);
+    });
+  },
+
+  cancelOrder(orderId, reason) {
+    return this._enqueue(async () => {
+      const base = await this.resolveBackendUrl();
       await fetch(`${base}/api/store/order/${orderId}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       });
-    } catch (err) {
-      console.warn('StoreAPI cancelOrder fallback:', err.message);
-    }
+    });
   },
 
-  async updatePayment(orderId, payMethod, payStatus, txnId) {
-    try {
-      const base = this.getBaseUrl();
-      await fetch(`${base}/api/store/order/${orderId}/pay`, {
+  updatePayment(orderId, payMethod, payStatus, txnId) {
+    return this._enqueue(async () => {
+      const base = await this.resolveBackendUrl();
+      const res = await fetch(`${base}/api/store/order/${orderId}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -261,14 +484,28 @@ const StoreAPI = {
           txn_id: txnId || null,
         }),
       });
-    } catch (err) {
-      console.warn('StoreAPI updatePayment fallback:', err.message);
-    }
+      // Nếu đơn chưa kịp tạo trên backend thì tạo đơn rồi cập nhật lại thanh toán
+      if (res.status === 404) {
+        const lo = DB.data.orders.find((x) => x.id === orderId);
+        if (lo) {
+          await this._sendOrderToBackend(lo);
+          await fetch(`${base}/api/store/order/${orderId}/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pay_method: payMethod,
+              pay_status: payStatus,
+              txn_id: txnId || null,
+            }),
+          });
+        }
+      }
+    });
   },
 
-  async createReturn(yc) {
-    try {
-      const base = this.getBaseUrl();
+  createReturn(yc) {
+    return this._enqueue(async () => {
+      const base = await this.resolveBackendUrl();
       const payload = {
         return_id: yc.id,
         order_id: yc.orderId,
@@ -283,14 +520,12 @@ const StoreAPI = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-    } catch (err) {
-      console.warn('StoreAPI createReturn fallback:', err.message);
-    }
+    });
   },
 
-  async registerCustomer(kh) {
-    try {
-      const base = this.getBaseUrl();
+  registerCustomer(kh) {
+    return this._enqueue(async () => {
+      const base = await this.resolveBackendUrl();
       const payload = {
         customer_id: kh.id,
         username: kh.username,
@@ -305,9 +540,27 @@ const StoreAPI = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-    } catch (err) {
-      console.warn('StoreAPI registerCustomer fallback:', err.message);
-    }
+    });
+  },
+
+  updateCustomer(kh) {
+    return this._enqueue(async () => {
+      const base = await this.resolveBackendUrl();
+      const defAddr = kh.addresses?.find((a) => a.isDefault) || kh.addresses?.[0];
+      const fullAddr = defAddr ? `${defAddr.line}, ${defAddr.ward}, ${defAddr.district}, ${defAddr.city}` : '';
+      const payload = {
+        customer_id: kh.id,
+        name: kh.name || kh.username,
+        email: kh.email || '',
+        phone: kh.phone || defAddr?.phone || '',
+        address: fullAddr,
+      };
+      await fetch(`${base}/api/store/customer/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    });
   },
 };
 
@@ -324,7 +577,19 @@ const Catalog = {
   all() { return SEED.products; },
   get(id) { return this.byId[id] || null; },
   sku(p, colorCode, size) { return `SKU-${p.code}-${colorCode}-${size}`; },
-  info(sku) { return this.skuIndex[sku] || null; },
+  info(sku) {
+    if (this.skuIndex[sku]) return this.skuIndex[sku];
+    // Fallback an toàn cho các SKU đồng bộ từ CSDL SQLite (vd: SKU-QJ02-XANH-32 hoặc SKU mới do Thủ kho tạo)
+    const parts = String(sku || '').split('-');
+    const code = parts[1] || '';
+    const colorCode = parts[2] || 'STD';
+    const size = parts.slice(3).join('-') || 'M';
+    const matchedProd = SEED.products.find((p) => p.code === code) || SEED.products[0];
+    const matchedColor = matchedProd.colors.find((c) => c.code === colorCode) || { name: colorCode, code: colorCode, hex: '#111827' };
+    const fallback = { p: matchedProd, color: matchedColor, size };
+    this.skuIndex[sku] = fallback;
+    return fallback;
+  },
   stock(sku) { return DB.data.stock[sku] ?? 0; },
   totalStock(p) { let t = 0; p.colors.forEach((c) => p.sizes.forEach((sz) => { t += this.stock(this.sku(p, c.code, sz)); })); return t; },
   promoActive(p) {
@@ -649,7 +914,9 @@ const KhachHangController = {
       if (d.phone && !PHONE_RE.test(d.phone)) e.phone = 'Số điện thoại gồm 10 số, bắt đầu bằng 0.';
       if (Object.keys(e).length) return fail('Thông tin chưa hợp lệ.', { fields: e });
       Object.assign(kh, { name: d.name.trim(), email: d.email.trim().toLowerCase(), phone: d.phone || '', gender: d.gender || '', dob: d.dob || '' });
-      DB.save(); return ok({ msg: 'Đã cập nhật thông tin liên hệ.' });
+      DB.save();
+      StoreAPI.updateCustomer(kh);
+      return ok({ msg: 'Đã cập nhật thông tin liên hệ.' });
     }
     if (thaoTac === 'LUU_DIA_CHI') {
       if (!(d.name || '').trim()) e.name = 'Nhập tên người nhận.';
@@ -664,17 +931,24 @@ const KhachHangController = {
       if (!a) { a = { id: 'DC' + DB.next('addr') }; kh.addresses.push(a); }
       Object.assign(a, { name: d.name.trim(), phone: d.phone, city: d.city, district: d.district.trim(), ward: d.ward.trim(), line: d.line.trim(), label: d.label || 'Nhà riêng' });
       if (d.isDefault || kh.addresses.length === 1) kh.addresses.forEach((x) => { x.isDefault = x.id === a.id; }); else a.isDefault = !!a.isDefault;
-      DB.save(); return ok({ msg: d.id ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ mới vào sổ địa chỉ.', a });
+      DB.save();
+      StoreAPI.updateCustomer(kh);
+      return ok({ msg: d.id ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ mới vào sổ địa chỉ.', a });
     }
     if (thaoTac === 'XOA_DIA_CHI') {
       const i = kh.addresses.findIndex((x) => x.id === d.id); if (i < 0) return fail('Không có quyền thao tác trên địa chỉ này.');
       const wasDef = kh.addresses[i].isDefault; kh.addresses.splice(i, 1);
       if (wasDef && kh.addresses[0]) kh.addresses[0].isDefault = true;
-      DB.save(); return ok({ msg: 'Đã xóa địa chỉ.' });
+      DB.save();
+      StoreAPI.updateCustomer(kh);
+      return ok({ msg: 'Đã xóa địa chỉ.' });
     }
     if (thaoTac === 'MAC_DINH') {
       if (!kh.addresses.some((x) => x.id === d.id)) return fail('Không có quyền thao tác trên địa chỉ này.');
-      kh.addresses.forEach((x) => { x.isDefault = x.id === d.id; }); DB.save(); return ok({ msg: 'Đã đặt làm địa chỉ mặc định.' });
+      kh.addresses.forEach((x) => { x.isDefault = x.id === d.id; });
+      DB.save();
+      StoreAPI.updateCustomer(kh);
+      return ok({ msg: 'Đã đặt làm địa chỉ mặc định.' });
     }
     if (thaoTac === 'DOI_MAT_KHAU') {
       if (d.old !== kh.password) e.old = 'Mật khẩu hiện tại không đúng.';
@@ -797,9 +1071,15 @@ const DatHangController = {
   /* xacNhanDatHang: kiểm tra lại giá, tồn, voucher rồi tạo đơn & giữ tồn trong một giao dịch */
   xacNhanDatHang(nhan, voucherCode, banTinhDaXem, ghiChu) {
     const u = Session.user(); if (!u) return fail('Phiên đăng nhập đã hết hạn.', { code: 'CAN_DANG_NHAP' });
+    if (u.status === 'KHOA' || u.status === 'BLACKLIST') return fail('Tài khoản của bạn đang nằm trong danh sách hạn chế (Blacklist). Không thể thực hiện đặt hàng.', { code: 'KHOA' });
     const t = this.tinhDonHang(nhan, voucherCode);
     if (!t.hopLe) return fail(t.loiVoucher || t.loi[0] || Object.values(t.nhanLoi)[0], { code: 'DIEU_CHINH', t });
     if (banTinhDaXem && banTinhDaXem.tong !== t.tong) return fail('Giá, tồn kho hoặc điều kiện voucher đã thay đổi. Vui lòng kiểm tra và xác nhận lại.', { code: 'CAN_XAC_NHAN_LAI', truoc: banTinhDaXem.tong, sau: t.tong });
+    const maxExist = DB.data.orders.reduce((mx, x) => {
+      const num = parseInt(String(x.id || '').replace(/^DH2026/, ''), 10);
+      return !isNaN(num) && num > mx ? num : mx;
+    }, DB.data.seq.order || 1120);
+    DB.data.seq.order = Math.max(DB.data.seq.order || 1120, maxExist);
     const id = 'DH2026' + DB.next('order');
     const addr = `${nhan.line}, ${nhan.ward}, ${nhan.district}, ${nhan.city}`;
     const o = {
@@ -813,7 +1093,7 @@ const DatHangController = {
     };
     t.gio.lines.forEach((l) => { DB.data.stock[l.sku] -= l.qty; });
     if (t.voucher) t.voucher.used += 1;
-    DB.data.orders.push(o);
+    DB.data.orders.unshift(o);
     DB.data.carts[u.id] = [];
     DB.save();
     StoreAPI.createOrder(o);

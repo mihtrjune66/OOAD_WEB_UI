@@ -2,6 +2,21 @@
 // URBAN CHIC® - HỆ THỐNG VẬN HÀNH & QUẢN TRỊ NỘI BỘ (CHUẨN ĐẶC TẢ USE CASE OOAD)
 // ==========================================================================
 
+// Hỗ trợ truyền dữ liệu liên tab tức thì bằng BroadcastChannel (nếu mở trên cùng trình duyệt)
+const urbanChicChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('urban_chic_sync_channel') : null;
+if (urbanChicChannel) {
+    urbanChicChannel.onmessage = (ev) => {
+        if (ev.data && ev.data.type === 'STORE_EVENT') {
+            autoSyncCurrentTab();
+        }
+    };
+}
+function notifyStoreChannel() {
+    try {
+        if (urbanChicChannel) urbanChicChannel.postMessage({ type: 'ADMIN_EVENT', t: Date.now() });
+    } catch (e) { /* bỏ qua */ }
+}
+
 let currentUser = null;
 let currentTab = null;
 let currentOpsFilter = 'TAT_CA';
@@ -153,7 +168,35 @@ window.addEventListener('DOMContentLoaded', () => {
     bindAdminForms();
     bindOpsForms();
     bindWarehouseForms();
+
+    // Tự động đồng bộ dữ liệu thời gian thực (mỗi 4 giây) và ngay khi chuyển sang tab trình duyệt
+    setInterval(() => autoSyncCurrentTab(), 4000);
+    window.addEventListener('focus', () => autoSyncCurrentTab());
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) autoSyncCurrentTab();
+    });
 });
+
+function autoSyncCurrentTab() {
+    if (!currentUser || !currentTab) return;
+    // Không làm mới nếu đang mở cửa sổ modal hoặc đang gõ trong ô nhập liệu
+    const anyModalOpen = Array.from(document.querySelectorAll('[id^="modal-"]')).some(el => !el.classList.contains('hidden'));
+    if (anyModalOpen) return;
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
+
+    if (currentTab === 'ops-orders') loadOpsOrders();
+    else if (currentTab === 'ops-labels') loadOpsLabels();
+    else if (currentTab === 'ops-tracking') loadOpsTracking();
+    else if (currentTab === 'ops-returns') loadOpsReturns();
+    else if (currentTab === 'dashboard') loadDashboard();
+    else if (currentTab === 'customers') loadCustomers();
+    else if (currentTab === 'vouchers') loadVouchers();
+    else if (currentTab === 'wh-skus') loadWhSkus();
+    else if (currentTab === 'wh-inventory') loadWhInventory();
+    else if (currentTab === 'wh-locations') loadWhLocations();
+    else if (currentTab === 'wh-receipts') loadWhReceipts();
+}
 
 function renderUserWorkspace(user) {
     const roleKey = user.role || 'ADMIN';
@@ -565,6 +608,7 @@ async function toggleCustomerBlacklist(maKh) {
     const res = await fetch(`/api/admin/customers/${maKh}/toggle-blacklist`, { method: 'PATCH' });
     const data = await res.json();
     alert(data.message);
+    notifyStoreChannel();
     loadCustomers();
 }
 
@@ -635,6 +679,7 @@ async function toggleVoucher(code) {
         return;
     }
     alert(data.message);
+    notifyStoreChannel();
     loadVouchers();
 }
 
@@ -816,6 +861,7 @@ function bindAdminForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-add-voucher');
             loadVouchers();
         } catch (err) {
@@ -874,6 +920,7 @@ function bindAdminForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             loadPolicies();
         } catch (err) {
             alert("Lỗi: " + err.message);
@@ -1059,6 +1106,7 @@ async function approveOpsOrder(orderId) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         alert(data.message);
+        notifyStoreChannel();
         loadOpsOrders();
     } catch (err) {
         alert("Lỗi: " + err.message);
@@ -1077,6 +1125,7 @@ async function rejectOpsOrder(orderId) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         alert(data.message);
+        notifyStoreChannel();
         loadOpsOrders();
     } catch (err) {
         alert("Lỗi: " + err.message);
@@ -1278,6 +1327,7 @@ async function dispatchOrderToCarrier(orderId) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         alert(data.message);
+        notifyStoreChannel();
         loadOpsTracking();
     } catch (err) {
         alert("Lỗi: " + err.message);
@@ -1294,6 +1344,7 @@ async function syncCarrierWebhook(orderId) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail);
         alert(data.message);
+        notifyStoreChannel();
         loadOpsTracking();
     } catch (err) {
         alert("Lỗi: " + err.message);
@@ -1419,6 +1470,7 @@ function bindOpsForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-ops-tracking');
             loadOpsTracking();
         } catch (err) {
@@ -1443,6 +1495,7 @@ function bindOpsForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-ops-return-detail');
             loadOpsReturns();
         } catch (err) {
@@ -1795,6 +1848,7 @@ function bindWarehouseForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-add-sku');
             loadWhSkus();
             loadWhInventory();
@@ -1819,6 +1873,7 @@ function bindWarehouseForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-stock-config');
             loadWhInventory();
         } catch (err) {
@@ -1883,6 +1938,7 @@ function bindWarehouseForms() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
             alert(data.message);
+            notifyStoreChannel();
             closeModal('modal-create-receipt');
             loadWhReceipts();
             loadWhInventory();

@@ -156,5 +156,16 @@ window.addEventListener('hashchange', () => {
 App.render();
 if (typeof StoreAPI !== 'undefined') {
   StoreAPI.syncWithBackend();
-  setInterval(() => StoreAPI.syncWithBackend(), 15000);
+  setInterval(() => StoreAPI.syncWithBackend(), 4000);
+  window.addEventListener('focus', () => StoreAPI.syncWithBackend());
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) StoreAPI.syncWithBackend();
+  });
+  if (typeof storeSyncChannel !== 'undefined' && storeSyncChannel) {
+    storeSyncChannel.onmessage = (ev) => {
+      if (ev.data && ev.data.type === 'ADMIN_EVENT') {
+        StoreAPI.syncWithBackend();
+      }
+    };
+  }
 }
