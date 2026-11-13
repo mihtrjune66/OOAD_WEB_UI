@@ -148,5 +148,13 @@ const App = {
 DB.load();
 Catalog.init();
 App.renderFooter();
-window.addEventListener('hashchange', () => { UI.closeModal(); App.render(); });
+window.addEventListener('hashchange', () => {
+  UI.closeModal();
+  App.render();
+  if (typeof StoreAPI !== 'undefined') StoreAPI.syncWithBackend();
+});
 App.render();
+if (typeof StoreAPI !== 'undefined') {
+  StoreAPI.syncWithBackend();
+  setInterval(() => StoreAPI.syncWithBackend(), 15000);
+}

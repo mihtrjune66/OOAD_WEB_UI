@@ -180,6 +180,56 @@ class ReceiptCreate(BaseModel):
     ghi_chu: Optional[str] = ""
     chi_tiet: List[ReceiptItem]
 
+# --- STOREFRONT (KHÁCH HÀNG) MODELS ---
+class StoreOrderItem(BaseModel):
+    sku: str
+    name: Optional[str] = ""
+    qty: int
+    price: float
+
+class StoreOrderCreate(BaseModel):
+    order_id: str
+    customer_id: str
+    customer_name: str
+    phone: str
+    address: str
+    items: List[StoreOrderItem]
+    subtotal: float
+    ship_fee: float = 0
+    discount: float = 0
+    voucher_code: Optional[str] = None
+    total: float
+    pay_method: Optional[str] = "COD"
+    pay_status: Optional[str] = "CHUA_THANH_TOAN"
+    note: Optional[str] = ""
+
+class StoreCancelOrder(BaseModel):
+    reason: str
+
+class StorePayOrder(BaseModel):
+    pay_method: str
+    pay_status: str
+    txn_id: Optional[str] = None
+
+class StoreReturnCreate(BaseModel):
+    return_id: str
+    order_id: str
+    customer_name: str
+    reason: str
+    detail: Optional[str] = ""
+    option: str
+    image_url: Optional[str] = ""
+
+class StoreCustomerRegister(BaseModel):
+    customer_id: Optional[str] = None
+    username: str
+    email: str
+    password: Optional[str] = "Demo@123"
+    phone: Optional[str] = ""
+    name: Optional[str] = ""
+    address: Optional[str] = ""
+
+
 
 # ==================== AUTHENTICATION API ====================
 
@@ -1204,6 +1254,195 @@ def get_products(db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
     cursor.execute("SELECT * FROM SAN_PHAM")
     return [row_to_dict(r) for r in cursor.fetchall()]
+
+# ==================== PHÂN HỆ 1: STOREFRONT API (KHÁCH HÀNG KẾT NỐI CSDL) ====================
+
+@app.get("/api/store/sync")
+def store_sync(customer_id: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    query = "SELECT * FROM DON_HANG WHERE 1=1"
+    params = []
+    if customer_id:
+        query += " AND MaKhachHang = ?"
+        params.append(customer_id)
+    query += " ORDER BY NgayDat DESC"
+    cursor.execute(query, params)
+    orders = [row_to_dict(r) for r in cursor.fetchall()]
+    for o in orders:
+        cursor.execute("SELECT * FROM CHI_TIET_DON_HANG WHERE MaDonHang = ?", (o["MaDonHang"],))
+        o["items"] = [row_to_dict(i) for i in cursor.fetchall()]
+
+    cursor.execute("SELECT * FROM YEU_CAU_DOI_TRA ORDER BY NgayGuiYeuCau DESC")
+    returns = [row_to_dict(r) for r in cursor.fetchall()]
+
+    cursor.execute("SELECT MaSKU, SoLuongKhaDung FROM TON_KHO_VI_TRI WHERE MaSKU IS NOT NULL")
+    stock = {r["MaSKU"]: r["SoLuongKhaDung"] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT * FROM KHUYEN_MAI WHERE TrangThaiKM = 'DANG_HOAT_DONG'")
+    vouchers = [row_to_dict(r) for r in cursor.fetchall()]
+
+    cursor.execute("SELECT MaKhachHang, TrangThaiKH FROM KHACH_HANG")
+    customers = {r["MaKhachHang"]: r["TrangThaiKH"] for r in cursor.fetchall()}
+
+    return {
+        "success": True,
+        "orders": orders,
+        "returns": returns,
+        "stock": stock,
+        "vouchers": vouchers,
+        "customers": customers
+    }
+
+@app.post("/api/store/order")
+def store_create_order(req: StoreOrderCreate, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+
+    # Kiểm tra Blacklist của khách hàng trong CSDL SQLite
+    cursor.execute("SELECT TrangThaiKH, HoTen FROM KHACH_HANG WHERE MaKhachHang = ? OR SoDienThoai = ?", (req.customer_id, req.phone))
+    kh = cursor.fetchone()
+    if kh and kh["TrangThaiKH"] == "BLACKLIST":
+        raise HTTPException(status_code=403, detail=f"Khách hàng [{kh['HoTen']}] đang nằm trong danh sách hạn chế (Blacklist). Không thể thực hiện đặt hàng!")
+
+    # Đảm bảo có thông tin khách hàng trong KHACH_HANG
+    cursor.execute("SELECT MaKhachHang FROM KHACH_HANG WHERE MaKhachHang = ?", (req.customer_id,))
+    if not cursor.fetchone():
+        cursor.execute("""
+            INSERT OR IGNORE INTO KHACH_HANG (MaKhachHang, HoTen, SoDienThoai, DiaChiMacDinh, TrangThaiKH)
+            VALUES (?, ?, ?, ?, 'HOAT_DONG')
+        """, (req.customer_id, req.customer_name, req.phone, req.address))
+
+    # Kiểm tra đơn đã tồn tại chưa
+    cursor.execute("SELECT MaDonHang FROM DON_HANG WHERE MaDonHang = ?", (req.order_id,))
+    if cursor.fetchone():
+        return {"success": True, "message": "Đơn hàng đã tồn tại", "order_id": req.order_id}
+
+    now_str = datetime.now().strftime("%d/%m %H:%M")
+    initial_log = f"{now_str}: Khách hàng đặt đơn hàng trực tuyến - Chờ nhân viên vận hành duyệt"
+
+    cursor.execute("""
+        INSERT INTO DON_HANG (
+            MaDonHang, MaKhachHang, TenKhachHang, SoDienThoai, DiaChiGiao, MaKhuyenMai,
+            TongTienHang, PhiVanChuyen, TienGiamGia, TongThanhToan, PhuongThucTT, TrangThaiTT,
+            TrangThaiDon, DonViVanChuyen, LichSuHanhTrinh
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CHO_DUYET', 'Giao Hàng Nhanh (GHN)', ?)
+    """, (
+        req.order_id, req.customer_id, req.customer_name, req.phone, req.address, req.voucher_code,
+        req.subtotal, req.ship_fee, req.discount, req.total, req.pay_method, req.pay_status,
+        initial_log
+    ))
+
+    for it in req.items:
+        item_name = it.name or it.sku
+        cursor.execute("""
+            INSERT INTO CHI_TIET_DON_HANG (MaDonHang, MaSKU, TenSanPham, SoLuongMua, DonGiaBan, ThanhTien)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (req.order_id, it.sku, item_name, it.qty, it.price, it.qty * it.price))
+
+        cursor.execute("""
+            UPDATE TON_KHO_VI_TRI
+            SET SoLuongTamGiu = SoLuongTamGiu + ?,
+                SoLuongKhaDung = MAX(0, SoLuongKhaDung - ?)
+            WHERE MaSKU = ?
+        """, (it.qty, it.qty, it.sku))
+
+    if req.voucher_code:
+        cursor.execute("UPDATE KHUYEN_MAI SET SoLuotDaDung = SoLuotDaDung + 1 WHERE CodeVoucher = ?", (req.voucher_code,))
+
+    db.commit()
+    return {"success": True, "message": f"Đơn hàng #{req.order_id} đã được lưu vào hệ thống CSDL SQLite nội bộ!", "order_id": req.order_id}
+
+@app.post("/api/store/order/{order_id}/cancel")
+def store_cancel_order(order_id: str, req: StoreCancelOrder, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM DON_HANG WHERE MaDonHang = ?", (order_id,))
+    order = cursor.fetchone()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng!")
+    if order["TrangThaiDon"] != "CHO_DUYET":
+        raise HTTPException(status_code=400, detail="Đơn hàng đã được duyệt hoặc đang giao, không thể hủy trực tiếp!")
+
+    cursor.execute("SELECT MaSKU, SoLuongMua FROM CHI_TIET_DON_HANG WHERE MaDonHang = ?", (order_id,))
+    for item in cursor.fetchall():
+        cursor.execute("""
+            UPDATE TON_KHO_VI_TRI
+            SET SoLuongTamGiu = MAX(0, SoLuongTamGiu - ?),
+                SoLuongKhaDung = SoLuongThucTe - MAX(0, SoLuongTamGiu - ?)
+            WHERE MaSKU = ?
+        """, (item["SoLuongMua"], item["SoLuongMua"], item["MaSKU"]))
+
+    now_str = datetime.now().strftime("%d/%m %H:%M")
+    old_log = order["LichSuHanhTrinh"] or ""
+    new_log = f"{old_log} | {now_str}: Khách hủy đơn trên Web (Lý do: {req.reason}) - Đã giải phóng tồn kho".strip(" |")
+
+    trang_thai_tt = order["TrangThaiTT"]
+    if trang_thai_tt == "DA_THANH_TOAN":
+        trang_thai_tt = "CHO_HOAN_TIEN"
+
+    cursor.execute("""
+        UPDATE DON_HANG
+        SET TrangThaiDon = 'DA_HUY', LyDoHuy = ?, TrangThaiTT = ?, LichSuHanhTrinh = ?
+        WHERE MaDonHang = ?
+    """, (req.reason, trang_thai_tt, new_log, order_id))
+    db.commit()
+    return {"success": True, "message": f"Đã hủy đơn hàng #{order_id} và hoàn tồn kho!"}
+
+@app.post("/api/store/order/{order_id}/pay")
+def store_pay_order(order_id: str, req: StorePayOrder, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM DON_HANG WHERE MaDonHang = ?", (order_id,))
+    order = cursor.fetchone()
+    if not order:
+        raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng!")
+
+    now_str = datetime.now().strftime("%d/%m %H:%M")
+    old_log = order["LichSuHanhTrinh"] or ""
+    txn_note = f" (Mã GD: {req.txn_id})" if req.txn_id else ""
+    new_log = f"{old_log} | {now_str}: Thanh toán qua {req.pay_method} - Trạng thái: {req.pay_status}{txn_note}".strip(" |")
+
+    cursor.execute("""
+        UPDATE DON_HANG
+        SET PhuongThucTT = ?, TrangThaiTT = ?, LichSuHanhTrinh = ?
+        WHERE MaDonHang = ?
+    """, (req.pay_method, req.pay_status, new_log, order_id))
+    db.commit()
+    return {"success": True, "message": f"Đã cập nhật trạng thái thanh toán đơn #{order_id}!"}
+
+@app.post("/api/store/returns")
+def store_create_return(req: StoreReturnCreate, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT MaYeuCau FROM YEU_CAU_DOI_TRA WHERE MaYeuCau = ?", (req.return_id,))
+    if cursor.fetchone():
+        return {"success": True, "message": "Yêu cầu đổi trả đã tồn tại", "return_id": req.return_id}
+
+    cursor.execute("""
+        INSERT INTO YEU_CAU_DOI_TRA (
+            MaYeuCau, MaDonHang, KhachHang, LyDoDoiTra, HinhAnhMinhChung, PhuongAnXuLy, TrangThaiYC
+        ) VALUES (?, ?, ?, ?, ?, ?, 'CHO_TIEP_NHAN')
+    """, (
+        req.return_id, req.order_id, req.customer_name, req.reason, req.image_url, req.option
+    ))
+    db.commit()
+    return {"success": True, "message": f"Đã lưu yêu cầu đổi trả #{req.return_id} và gửi tới Phân hệ Vận hành!"}
+
+@app.post("/api/store/customer/register")
+def store_register_customer(req: StoreCustomerRegister, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT MaKhachHang FROM KHACH_HANG WHERE LOWER(Email) = ?", (req.email.lower(),))
+    if cursor.fetchone():
+        return {"success": True, "message": "Khách hàng đã có trong CSDL"}
+
+    ma_kh = req.customer_id
+    if not ma_kh:
+        cursor.execute("SELECT COUNT(*) FROM KHACH_HANG")
+        ma_kh = f"KH{cursor.fetchone()[0] + 1:03d}"
+
+    cursor.execute("""
+        INSERT OR IGNORE INTO KHACH_HANG (MaKhachHang, HoTen, SoDienThoai, Email, DiaChiMacDinh, TrangThaiKH)
+        VALUES (?, ?, ?, ?, ?, 'HOAT_DONG')
+    """, (ma_kh, req.name or req.username, req.phone, req.email, req.address))
+    db.commit()
+    return {"success": True, "customer_id": ma_kh, "message": "Đã lưu tài khoản khách hàng vào CSDL!"}
+
 
 # Phục vụ giao diện tĩnh
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")

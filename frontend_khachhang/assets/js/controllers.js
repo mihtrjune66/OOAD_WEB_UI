@@ -59,6 +59,259 @@ const DB = {
   next(k) { this.data.seq[k] += 1; return this.data.seq[k]; },
 };
 
+/* ----------------- KẾT NỐI ĐỒNG BỘ CSDL SQLITE (FASTAPI BACKEND) ----------------- */
+const StoreAPI = {
+  getBaseUrl() {
+    if (window.API_BASE_URL) return window.API_BASE_URL;
+    const h = window.location.hostname;
+    const p = window.location.port;
+    if (h === '127.0.0.1' || h === 'localhost') {
+      if (p === '8000') return '';
+      return 'http://127.0.0.1:8000';
+    }
+    // Khi triển khai trên Render:
+    // Website khách hàng: urban-chic-store.onrender.com -> Backend API: urban-chic-admin.onrender.com
+    if (h.includes('urban-chic-store')) {
+      return `https://${h.replace('urban-chic-store', 'urban-chic-admin')}`;
+    }
+    if (window.location.pathname.startsWith('/khach-hang')) {
+      return '';
+    }
+    const saved = localStorage.getItem('urban_chic_api_url');
+    if (saved) return saved;
+    return `https://${h.replace('store', 'admin')}`;
+  },
+
+  async syncWithBackend() {
+    try {
+      const base = this.getBaseUrl();
+      const res = await fetch(`${base}/api/store/sync`, { method: 'GET' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success) return;
+
+      let changed = false;
+
+      // 1. Đồng bộ số lượng tồn khả dụng thực tế từ kho SQLite
+      if (data.stock && Object.keys(data.stock).length) {
+        Object.entries(data.stock).forEach(([sku, qty]) => {
+          if (DB.data.stock[sku] !== qty) {
+            DB.data.stock[sku] = qty;
+            changed = true;
+          }
+        });
+      }
+
+      // 2. Đồng bộ trạng thái đơn hàng (Được nhân viên duyệt, đóng gói, giao...)
+      if (data.orders && data.orders.length) {
+        data.orders.forEach((bo) => {
+          let lo = DB.data.orders.find((o) => o.id === bo.MaDonHang);
+          if (!lo) {
+            lo = {
+              id: bo.MaDonHang,
+              customerId: bo.MaKhachHang,
+              date: bo.NgayDat,
+              items: (bo.items || []).map((it) => ({
+                sku: it.MaSKU,
+                qty: it.SoLuongMua,
+                price: it.DonGiaBan,
+              })),
+              receiver: {
+                name: bo.TenKhachHang,
+                phone: bo.SoDienThoai,
+                address: bo.DiaChiGiao,
+              },
+              subtotal: bo.TongTienHang,
+              shipFee: bo.PhiVanChuyen,
+              discount: bo.TienGiamGia,
+              voucher: bo.MaKhuyenMai,
+              total: bo.TongThanhToan,
+              payMethod: bo.PhuongThucTT,
+              payStatus: bo.TrangThaiTT,
+              status: bo.TrangThaiDon,
+              trackingCode: bo.MaVanDon,
+              carrier: bo.DonViVanChuyen || 'Giao Hàng Nhanh (GHN)',
+              history: (bo.LichSuHanhTrinh || '').split(' | ').map((s) => ({ t: bo.NgayDat, s })),
+              tracking: [],
+            };
+            DB.data.orders.unshift(lo);
+            changed = true;
+          } else {
+            if (lo.status !== bo.TrangThaiDon || lo.payStatus !== bo.TrangThaiTT || lo.trackingCode !== bo.MaVanDon) {
+              lo.status = bo.TrangThaiDon;
+              lo.payStatus = bo.TrangThaiTT;
+              if (bo.MaVanDon) lo.trackingCode = bo.MaVanDon;
+              if (bo.DonViVanChuyen) lo.carrier = bo.DonViVanChuyen;
+              if (bo.LichSuHanhTrinh) {
+                lo.history = bo.LichSuHanhTrinh.split(' | ').map((s) => ({ t: bo.NgayDat, s }));
+              }
+              changed = true;
+            }
+          }
+        });
+      }
+
+      // 3. Đồng bộ yêu cầu đổi trả từ SQLite
+      if (data.returns && data.returns.length) {
+        data.returns.forEach((br) => {
+          let lr = DB.data.returns.find((r) => r.id === br.MaYeuCau);
+          if (!lr) {
+            lr = {
+              id: br.MaYeuCau,
+              orderId: br.MaDonHang,
+              t: br.NgayGuiYeuCau,
+              items: [],
+              reason: br.LyDoDoiTra,
+              detail: br.GhiChuXuLy || '',
+              option: br.PhuongAnXuLy || 'Đổi sản phẩm mới',
+              images: br.HinhAnhMinhChung ? [br.HinhAnhMinhChung] : [],
+              status: br.TrangThaiYC,
+            };
+            DB.data.returns.push(lr);
+            changed = true;
+          } else if (lr.status !== br.TrangThaiYC) {
+            lr.status = br.TrangThaiYC;
+            if (br.PhuongAnXuLy) lr.option = br.PhuongAnXuLy;
+            changed = true;
+          }
+        });
+      }
+
+      // 4. Đồng bộ Blacklist từ SQLite
+      if (data.customers && Object.keys(data.customers).length) {
+        DB.data.customers.forEach((c) => {
+          if (data.customers[c.id] && c.status !== data.customers[c.id]) {
+            c.status = data.customers[c.id];
+            changed = true;
+          }
+        });
+      }
+
+      if (changed) {
+        DB.save();
+        if (window.App && typeof App.render === 'function') {
+          App.render();
+        }
+      }
+    } catch (err) {
+      // Bỏ qua lỗi mạng âm thầm để không gián đoạn trải nghiệm người dùng
+      console.warn('StoreAPI syncWithBackend skipped:', err.message);
+    }
+  },
+
+  async createOrder(o) {
+    try {
+      const base = this.getBaseUrl();
+      const payload = {
+        order_id: o.id,
+        customer_id: o.customerId,
+        customer_name: o.receiver.name,
+        phone: o.receiver.phone,
+        address: o.receiver.address,
+        items: o.items.map((it) => {
+          const info = typeof Catalog !== 'undefined' ? Catalog.info(it.sku) : null;
+          return {
+            sku: it.sku,
+            name: info?.p?.name ? `${info.p.name} (${info.color.name}/${info.size})` : it.sku,
+            qty: it.qty,
+            price: it.price,
+          };
+        }),
+        subtotal: o.subtotal,
+        ship_fee: o.shipFee || 0,
+        discount: o.discount || 0,
+        voucher_code: o.voucher || null,
+        total: o.total,
+        pay_method: o.payMethod || 'COD',
+        pay_status: o.payStatus || 'CHUA_THANH_TOAN',
+        note: o.note || '',
+      };
+      await fetch(`${base}/api/store/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn('StoreAPI createOrder fallback:', err.message);
+    }
+  },
+
+  async cancelOrder(orderId, reason) {
+    try {
+      const base = this.getBaseUrl();
+      await fetch(`${base}/api/store/order/${orderId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+    } catch (err) {
+      console.warn('StoreAPI cancelOrder fallback:', err.message);
+    }
+  },
+
+  async updatePayment(orderId, payMethod, payStatus, txnId) {
+    try {
+      const base = this.getBaseUrl();
+      await fetch(`${base}/api/store/order/${orderId}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pay_method: payMethod,
+          pay_status: payStatus,
+          txn_id: txnId || null,
+        }),
+      });
+    } catch (err) {
+      console.warn('StoreAPI updatePayment fallback:', err.message);
+    }
+  },
+
+  async createReturn(yc) {
+    try {
+      const base = this.getBaseUrl();
+      const payload = {
+        return_id: yc.id,
+        order_id: yc.orderId,
+        customer_name: (Session.user()?.name || Session.user()?.username || 'Khách hàng'),
+        reason: yc.reason,
+        detail: yc.detail || '',
+        option: yc.option || '',
+        image_url: yc.images?.[0] || '',
+      };
+      await fetch(`${base}/api/store/returns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn('StoreAPI createReturn fallback:', err.message);
+    }
+  },
+
+  async registerCustomer(kh) {
+    try {
+      const base = this.getBaseUrl();
+      const payload = {
+        customer_id: kh.id,
+        username: kh.username,
+        email: kh.email,
+        password: kh.password,
+        phone: kh.phone || '',
+        name: kh.name || '',
+        address: kh.addresses?.[0]?.line || '',
+      };
+      await fetch(`${base}/api/store/customer/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn('StoreAPI registerCustomer fallback:', err.message);
+    }
+  },
+};
+
+
 /* --------------------------- Danh mục SP --------------------------- */
 const Catalog = {
   byId: {}, skuIndex: {},
@@ -169,6 +422,7 @@ const TaiKhoanController = {
     if (Object.keys(dup).length) return fail('Tên đăng nhập hoặc email đã tồn tại. Vui lòng nhập lại.', { code: 'DA_TON_TAI', fields: dup });
     const kh = { id: 'KH' + String(DB.next('customer')).padStart(3, '0'), username: t.username, name: '', email: t.email, phone: '', password: t.password, status: 'HOAT_DONG', gender: '', dob: '', joined: nowISO().slice(0, 10), addresses: [] };
     cs.push(kh); DB.save();
+    StoreAPI.registerCustomer(kh);
     const mail = DichVuEmail.guiEmailXacNhanDangKy(kh);
     return ok({ maKhachHang: kh.id, emailSent: mail.ok, kh });
   },
@@ -477,6 +731,7 @@ const DonHangController = {
       hoanTien = o.refund;
     } else if (['CHO_CHON_PT', 'CHO_THANH_TOAN', 'THAT_BAI'].includes(o.payStatus)) o.payStatus = 'DA_HUY_GD';
     DB.save();
+    StoreAPI.cancelOrder(o.id, lyDo);
     return ok({ o, hoanTien });
   },
   hanDoiTra(o) { if (o.status !== 'DA_GIAO' || !o.deliveredAt) return null; const d = new Date(o.deliveredAt); d.setDate(d.getDate() + SEED.policy.soNgayDoiTra); return d; },
@@ -494,6 +749,7 @@ const DonHangController = {
     DB.data.returns.push(yc);
     o.history.push({ t: nowISO(), s: `Khách hàng gửi yêu cầu đổi trả ${yc.id} – ${d.option}` });
     DB.save();
+    StoreAPI.createReturn(yc);
     return ok({ yc });
   },
 };
@@ -560,6 +816,7 @@ const DatHangController = {
     DB.data.orders.push(o);
     DB.data.carts[u.id] = [];
     DB.save();
+    StoreAPI.createOrder(o);
     return ok({ maDon: id, o });
   },
 };
@@ -590,6 +847,7 @@ const ThanhToanController = {
     o.payMethod = 'COD'; o.payStatus = 'CHUA_THANH_TOAN';
     o.history.push({ t: nowISO(), s: `Xác nhận thanh toán tiền mặt khi nhận hàng (COD) – Số tiền phải thu ${fmt(o.total)}` });
     DB.save();
+    StoreAPI.updatePayment(o.id, 'COD', 'CHUA_THANH_TOAN');
     return ok({ o });
   },
   /* UC19 – khởi tạo giao dịch */
@@ -622,9 +880,11 @@ const ThanhToanController = {
     if (p.trangThai === 'THANH_CONG') {
       txn.status = 'THANH_CONG'; o.payStatus = 'DA_THANH_TOAN'; o.txnId = txn.maGD;
       o.history.push({ t: nowISO(), s: `Thanh toán ${PAY_LABEL[txn.cong]} thành công – Mã GD ${txn.maGD}` });
+      StoreAPI.updatePayment(o.id, txn.cong, 'DA_THANH_TOAN', txn.maGD);
     } else {
       txn.status = p.trangThai === 'HUY' ? 'HUY' : 'THAT_BAI'; o.payStatus = 'THAT_BAI';
       o.history.push({ t: nowISO(), s: `Giao dịch ${PAY_LABEL[txn.cong]} ${p.trangThai === 'HUY' ? 'bị khách hủy' : 'thất bại'} – Đơn chưa được thanh toán` });
+      StoreAPI.updatePayment(o.id, txn.cong, 'THAT_BAI', txn.maGD);
     }
     DB.save();
     return ok({ txn });
