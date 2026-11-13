@@ -81,3 +81,4 @@ Hệ thống tự động điều hướng đúng giao diện & quyền hạn t�
 Sau khi Merge code mới lên GitHub (`main`), Render sẽ tự động triển khai tại link:
 - **Portal Nội bộ:** `https://<ten-app>.onrender.com/`
 - **Web Khách hàng:** `https://<ten-app>.onrender.com/khach-hang/`
+
